@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Persistent Highlighter",
+  "version": "0.1.0",
+  "description": "Keep highlights and notes across conversations and page reloads.",
+  "browser_specific_settings": {"gecko": {"id": "persistent-highlighter@local", "strict_min_version": "140.0", "data_collection_permissions": {"required": ["none"]}}},
+  "permissions": ["storage", "activeTab", "tabs", "contextMenus", "webNavigation"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {"scripts": ["background.js"]},
+  "content_scripts": [{"matches": ["http://*/*", "https://*/*"], "js": ["content.js"], "css": ["highlights.css"], "run_at": "document_idle"}],
+  "action": {"default_title": "Highlights", "default_popup": "sidebar.html?popup"},
+  "sidebar_action": {"default_title": "Highlights", "default_panel": "sidebar.html", "open_at_install": false},
+  "commands": {"highlight-selection": {"suggested_key": {"default": "Alt+Shift+H"}, "description": "Highlight selection in yellow"}}
+}
