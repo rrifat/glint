@@ -26,12 +26,15 @@ if (
         click: () => {
           try {
             const panels = browser.sidebarAction || browser.sidePanel;
-            const options = browser.sidebarAction
-              ? undefined
-              : { windowId: state.windowId };
-            const action = isPopup
-              ? panels.open(options)
-              : panels.close(options);
+            // Firefox sidebarAction.open/close take no arguments. Chromium's
+            // sidePanel API needs a window context for both operations.
+            const action = browser.sidebarAction
+              ? isPopup
+                ? panels.open()
+                : panels.close()
+              : isPopup
+                ? panels.open({ windowId: state.windowId })
+                : panels.close({ windowId: state.windowId });
             action
               .then(() => {
                 if (isPopup) window.close();
