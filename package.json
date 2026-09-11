@@ -1,1 +1,16 @@
-{"name":"glint","version":"0.1.2","private":true,"type":"module","scripts":{"build":"node scripts/build.js","test":"node --test tests/*.test.js","check":"node --check src/sidebar.js && node --check src/content.js && node --check src/background.js"},"devDependencies":{"esbuild":"^0.25.0","jsdom":"^26.0.0"}}
+{
+  "name": "glint",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "package": "npm run build && node scripts/package.js",
+    "test": "node --test tests/*.test.js",
+    "check": "node scripts/check.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.0.0"
+  }
+}

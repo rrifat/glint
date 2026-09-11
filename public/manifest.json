@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glint",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Keep highlights and notes across conversations and page reloads.",
   "browser_specific_settings": {"gecko": {"id": "persistent-highlighter@local", "strict_min_version": "140.0", "data_collection_permissions": {"required": ["none"]}}},
   "permissions": ["storage", "activeTab", "tabs", "contextMenus", "webNavigation"],

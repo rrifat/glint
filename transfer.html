@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Export & transfer — Glint</title>
+        <link rel="stylesheet" href="sidebar.css" />
+        <link rel="stylesheet" href="transfer.css" />
+    </head>
+    <body>
+        <header>
+            <span class="eyebrow">GLINT</span>
+            <h1>Take your highlights with you</h1>
+            <p class="intro">
+                Read on your iPhone, or move your library to another browser.
+            </p>
+        </header>
+        <main class="content">
+            <p id="status" class="notice" role="status" hidden></p>
+            <section>
+                <h2>Export highlights</h2>
+                <label for="scope">Include</label>
+                <select id="scope">
+                    <option value="all">All saved highlights</option>
+                    <option value="current">Current conversation</option>
+                </select>
+                <p>
+                    Exports include saved quotes, notes and source links. Save
+                    any unfinished note edits first.
+                </p>
+                <div class="transfer-actions">
+                    <button id="text" class="save-note">
+                        Export for Apple Notes (.txt)
+                    </button>
+                    <button id="markdown" class="save-note">
+                        Export Markdown (.md)
+                    </button>
+                    <button id="backup" class="save-note">
+                        Download Glint backup (.json)
+                    </button>
+                </div>
+                <p>
+                    On your Mac, open Notes → File → Import to Notes and select
+                    the text file. Keep the imported note in your iCloud Notes
+                    folder, with Notes enabled in iCloud on both devices, to
+                    read it on your iPhone.
+                </p>
+                <p>
+                    Text and Markdown exports are reading copies. Importing them
+                    again creates another copy. They do not update automatically
+                    or restore highlights on websites. Only a Glint JSON backup
+                    can be imported back into Glint.
+                </p>
+            </section>
+            <section>
+                <h2>Import a Glint backup</h2>
+                <p>
+                    Move highlights from Firefox to Chromium, or restore a
+                    backup. Existing highlight IDs are skipped, keeping your
+                    local colours and notes. This adds missing highlights; it
+                    does not sync edits or deletions. An older backup can bring
+                    back deleted highlights.
+                </p>
+                <label for="import-file"
+                    >Choose a Glint JSON backup (up to 10 MB / 20,000
+                    highlights)</label
+                >
+                <input
+                    id="import-file"
+                    type="file"
+                    accept=".json,application/json"
+                />
+                <p id="preview"></p>
+                <button id="import" class="save-note" disabled>
+                    Import missing highlights
+                </button>
+                <p>
+                    After import, open the original page with Glint enabled. It
+                    will attempt to restore each saved passage when the matching
+                    text is loaded.
+                </p>
+            </section>
+        </main>
+        <script src="transfer-page.js"></script>
+    </body>
+</html>
