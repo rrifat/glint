@@ -2,15 +2,66 @@ import { keyFor, readConversation, LIBRARY_KEY, summarize } from "./storage.js";
 import { isColor } from "./colors.js";
 import { browser, onMessage } from "./browser.js";
 import { createBackup, importChanges } from "./transfer.js";
+import { adapterFor, stableConversationIdentity } from "./adapters.js";
+import { ensureIdentityMigration } from "./identity-migration.js";
+import { recover } from "./recovery-background.js";
 let queue = Promise.resolve();
 onMessage((msg, sender) => {
   if (
-    !["save", "update", "delete", "library", "export", "import"].includes(
-      msg?.type,
-    )
+    ![
+      "save",
+      "update",
+      "delete",
+      "load",
+      "library",
+      "export",
+      "import",
+      "recovery-preview",
+      "recovery-confirm",
+    ].includes(msg?.type)
   )
     return;
   const task = queue.then(async () => {
+    await ensureIdentityMigration(browser.storage.local);
+    if (msg.type === "recovery-preview" || msg.type === "recovery-confirm")
+      return recover(msg, sender);
+    if (msg.type === "load") {
+      if (
+        typeof msg.conversation !== "string" ||
+        typeof msg.url !== "string" ||
+        adapterFor(msg.url).identity(msg.url) !== msg.conversation
+      )
+        throw new Error("Invalid conversation URL.");
+      const rows = await readConversation(msg.conversation);
+      let changed = false;
+      for (const row of rows) {
+        if (row.url !== msg.url) {
+          row.originalUrl ||= row.url;
+          row.url = msg.url;
+          changed = true;
+        }
+        if (msg.title && row.title !== msg.title) {
+          row.title = msg.title;
+          changed = true;
+        }
+      }
+      if (changed) {
+        const changes = { [keyFor(msg.conversation)]: rows };
+        const index = (await browser.storage.local.get(LIBRARY_KEY))[
+          LIBRARY_KEY
+        ];
+        if (index) {
+          const summaries = index.filter(
+            (item) => item.conversation !== msg.conversation,
+          );
+          const summary = summarize(msg.conversation, rows);
+          if (summary) summaries.push(summary);
+          changes[LIBRARY_KEY] = summaries;
+        }
+        await browser.storage.local.set(changes);
+      }
+      return { rows };
+    }
     if (msg.type === "export" || msg.type === "import") {
       if (
         sender?.url?.split("?")[0] !== browser.runtime.getURL("transfer.html")
@@ -53,7 +104,9 @@ onMessage((msg, sender) => {
       if (
         !a?.anchor?.exact ||
         !isColor(a.color) ||
-        a.conversation !== msg.conversation
+        a.conversation !== msg.conversation ||
+        (stableConversationIdentity(a.url) &&
+          stableConversationIdentity(a.url) !== msg.conversation)
       )
         throw new Error("Invalid annotation");
       rows.push(a);

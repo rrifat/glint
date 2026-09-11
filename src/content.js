@@ -1,7 +1,15 @@
 import { adapterFor } from "./adapters.js";
 import { browser, onMessage } from "./browser.js";
-import { createAnchor, resolveAnchor } from "./anchors.js";
-import { keyFor, readConversation } from "./storage.js";
+import {
+  createAnchor,
+  resolveAnchor,
+  textIndex,
+  rangeFromMatch,
+} from "./anchors.js";
+import { recoveryMatch } from "./recovery.js";
+const recoveryDocument = crypto.randomUUID();
+const recoveryStatuses = new Map();
+import { keyFor, loadConversation } from "./storage.js";
 import {
   COLORS,
   colorValue,
@@ -272,6 +280,7 @@ async function save(color = "yellow") {
       color,
       note: "",
       url: location.href,
+      originalUrl: location.href,
       title: document.title,
       createdAt: Date.now(),
     };
@@ -331,12 +340,34 @@ function register() {
   }
 }
 function restore(root) {
+  // One temporary index for all recovered passages, across provider boundaries.
+  if (root === document.body && annotations.some((a) => a.recovery)) {
+    const index = textIndex(root);
+    let statusChanged = false;
+    for (const a of annotations.filter((a) => a.recovery)) {
+      const match = recoveryMatch(index.text, a.anchor);
+      if (recoveryStatuses.get(a.id) !== match.status) statusChanged = true;
+      recoveryStatuses.set(a.id, match.status);
+      const range = rangeFromMatch(
+        root,
+        index,
+        match.status === "matched" ? match : null,
+      );
+      if (range) ranges.set(a.id, range);
+      else ranges.delete(a.id);
+    }
+    if (statusChanged)
+      browser.runtime
+        .sendMessage({ type: "recovery-status", conversation })
+        .catch(() => {});
+  }
   const id = adapter.messageId(root);
   const candidates =
     root === document.body
       ? annotations.filter((a) => a.scope === "page")
       : [...(byMessage.get(id) || [])];
   for (const a of candidates) {
+    if (a.recovery) continue;
     if (a.scope === "page" && root !== document.body) continue;
     const range = resolveAnchor(root, a.anchor);
     if (range) ranges.set(a.id, range);
@@ -351,13 +382,22 @@ async function reload() {
   const token = ++generation;
   const next = adapterFor();
   const identity = next.identity();
-  const rows = await readConversation(identity);
-  if (token !== generation) return;
+  if (identity !== conversation) {
+    dismissPalette();
+    annotations = [];
+    ranges.clear();
+    recoveryStatuses.clear();
+    byMessage.clear();
+    register();
+  }
+  const rows = await loadConversation(identity, location.href, document.title);
+  if (token !== generation || next.identity() !== identity) return;
   adapter = next;
   conversation = identity;
   annotations = rows;
   byMessage = new Map();
   ranges.clear();
+  recoveryStatuses.clear();
   for (const a of rows) {
     const group = byMessage.get(a.messageId) || [];
     group.push(a);
@@ -411,6 +451,27 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes[keyFor(conversation)]) void reload();
 });
 onMessage((msg) => {
+  if (msg.type === "recovery-preview") {
+    if (
+      !supported ||
+      msg.url !== location.href ||
+      msg.conversation !== adapterFor().identity()
+    )
+      return Promise.resolve({
+        ok: false,
+        reason:
+          "The page changed or does not support highlighting. Preview again.",
+      });
+    const index = textIndex(document.body);
+    return Promise.resolve({
+      ok: true,
+      document: recoveryDocument,
+      results: msg.rows.map((row) => ({
+        id: row.id,
+        ...recoveryMatch(index.text, row.anchor),
+      })),
+    });
+  }
   if (msg.type === "highlight") {
     void save();
     return Promise.resolve({ ok: true });
@@ -420,7 +481,12 @@ onMessage((msg) => {
     return reload();
   }
   if (msg.type === "context")
-    return Promise.resolve({ conversation, title: document.title, supported });
+    return Promise.resolve({
+      conversation: adapterFor().identity(),
+      title: document.title,
+      supported,
+      recoveryStatuses: Object.fromEntries(recoveryStatuses),
+    });
   if (msg.type === "scroll")
     return (async () => {
       await reload();

@@ -1,6 +1,12 @@
-import { keyFor, readConversation, LIBRARY_KEY } from "./storage.js";
+import {
+  keyFor,
+  readConversation,
+  loadConversation,
+  LIBRARY_KEY,
+} from "./storage.js";
 import { element, reconcile, website, makeList } from "./sidebar-ui.js";
 import { browser } from "./browser.js";
+import { makeRecovery } from "./recovery-ui.js";
 
 const app = document.getElementById("app");
 const isPopup = location.search === "?popup";
@@ -108,7 +114,8 @@ const transfer = element("button", {
     },
   },
 });
-content.append(notice, current, library, transfer);
+const recovery = makeRecovery({ showError, refresh });
+content.append(notice, current, library, recovery.node, transfer);
 app.append(header, content);
 function showError(error) {
   notice.textContent = error.message || String(error);
@@ -128,8 +135,19 @@ async function refresh() {
             .sendMessage(tab.id, { type: "context" })
             .catch(() => null)
         : null;
-    const rows = context ? await readConversation(context.conversation) : [];
+    const rows = context
+      ? await loadConversation(
+          context.conversation,
+          tab.url,
+          context.title || tab.title || "",
+        )
+      : [];
     if (version !== refreshVersion) return;
+    recovery.setTarget(
+      context && context.supported !== false && /^https?:\/\//.test(tab.url)
+        ? { tabId: tab.id, url: tab.url, conversation: context.conversation }
+        : null,
+    );
     if (state.conversation !== context?.conversation) {
       currentList.node.remove();
       currentList = makeList({ ...handlers, current: true });
@@ -146,7 +164,16 @@ async function refresh() {
     title.title = title.textContent;
     currentCount.textContent = String(rows.length);
     empty.hidden = rows.length > 0;
-    currentList.update(rows);
+    currentList.update(
+      rows.map((row) =>
+        row.recovery
+          ? {
+              ...row,
+              recoveryStatus: context?.recoveryStatuses?.[row.id] || "missing",
+            }
+          : row,
+      ),
+    );
     if (!context) {
       empty.textContent =
         "Highlights are unavailable on this page. Open a regular website to get started.";
@@ -337,6 +364,14 @@ async function jump(annotation) {
   }
 }
 browser.tabs.onActivated.addListener(scheduleRefresh);
+browser.runtime.onMessage?.addListener((msg, sender) => {
+  if (
+    msg?.type === "recovery-status" &&
+    sender?.tab?.id === state.tabId &&
+    msg.conversation === state.conversation
+  )
+    scheduleRefresh();
+});
 browser.tabs.onUpdated.addListener((tabId, info) => {
   if (tabId === state.tabId && (info.status === "complete" || info.url))
     scheduleRefresh();

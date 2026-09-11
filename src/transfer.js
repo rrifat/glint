@@ -1,27 +1,30 @@
 import { isColor } from "./colors.js";
 import { keyFor, LIBRARY_KEY, summarize } from "./storage.js";
+import { normalizeAnnotation } from "./identity-migration.js";
 
 export const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
 const FORMAT = "glint-backup";
 
 export function createBackup(data) {
+  const annotations = Object.entries(data)
+    .filter(([key]) => key.startsWith("annotations:"))
+    .flatMap(([, rows]) => rows);
   return {
     format: FORMAT,
-    version: 1,
+    // Older Glint versions must not discard the conservative recovery policy.
+    version: annotations.some((row) => row.recovery) ? 2 : 1,
     exportedAt: new Date().toISOString(),
-    annotations: Object.entries(data)
-      .filter(([key]) => key.startsWith("annotations:"))
-      .flatMap(([, rows]) => rows),
+    annotations,
   };
 }
 
 export function validateBackup(backup) {
   if (
     backup?.format !== FORMAT ||
-    backup.version !== 1 ||
+    ![1, 2].includes(backup.version) ||
     !Array.isArray(backup.annotations)
   )
-    throw new Error("Choose a Glint JSON backup (version 1).");
+    throw new Error("Choose a Glint JSON backup (version 1 or 2).");
   if (
     backup.annotations.length > 20000 ||
     new TextEncoder().encode(JSON.stringify(backup)).length > MAX_BACKUP_BYTES
@@ -60,10 +63,27 @@ export function validateBackup(backup) {
       invalid();
     try {
       if (!["http:", "https:"].includes(new URL(row.url).protocol)) invalid();
+      if (
+        row.originalUrl !== undefined &&
+        (typeof row.originalUrl !== "string" ||
+          !["http:", "https:"].includes(new URL(row.originalUrl).protocol))
+      )
+        invalid();
     } catch {
       invalid();
     }
     const a = row.anchor;
+    if (
+      row.recovery !== undefined &&
+      (!row.recovery ||
+        typeof row.recovery.conversation !== "string" ||
+        !row.recovery.conversation ||
+        typeof row.recovery.id !== "string" ||
+        !row.recovery.id ||
+        row.scope !== "page" ||
+        row.messageId !== null)
+    )
+      invalid();
     if (
       !a ||
       typeof a.exact !== "string" ||
@@ -77,13 +97,24 @@ export function validateBackup(backup) {
     )
       invalid();
     // Copy the storage schema explicitly; never merge arbitrary imported object properties.
-    return {
+    return normalizeAnnotation({
       id: row.id,
       conversation: row.conversation,
       provider: row.provider,
       messageId: row.messageId,
       scope: row.scope,
       url: row.url,
+      ...(row.recovery
+        ? {
+            recovery: {
+              conversation: row.recovery.conversation,
+              id: row.recovery.id,
+            },
+          }
+        : {}),
+      ...(row.originalUrl !== undefined
+        ? { originalUrl: row.originalUrl }
+        : {}),
       title: row.title,
       note: row.note,
       color: row.color,
@@ -95,7 +126,7 @@ export function validateBackup(backup) {
         start: a.start,
         end: a.end,
       },
-    };
+    });
   });
 }
 

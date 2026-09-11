@@ -52,15 +52,29 @@ After updating the extension, run `npm run build`, reload the extension in `abou
 
 Run `npm test` for anchor, editing, colour, storage migration and sidebar tests and `npm run check` for JavaScript syntax checks. Rebuild and reload the temporary extension after changes. Temporary add-ons must be loaded again after restarting Firefox; use a signed package for permanent installation.
 
-Version 0.2.0 packages are `glint-0.2.0-firefox.xpi` (unsigned) and `glint-0.2.0-chromium.zip` (extract before loading unpacked). The older `glint.xpi` (0.1.2) and `persistent-highlighter.xpi` have been retained. No upload or signing has been performed.
+Version 0.3.0 packages are `glint-0.3.0-firefox.xpi` (unsigned) and `glint-0.3.0-chromium.zip` (extract before loading unpacked). Older packages may remain locally and are ignored by Git. No upload or signing has been performed.
 
 Glint was previously named Persistent Highlighter. Its Firefox extension ID and storage format remain unchanged so the rename preserves existing highlights when updating the same installation.
 
 ## How it works
 
+### Recover highlights when a URL changes
+
+Open the destination page, open Glint's popup or sidebar, and expand **Link saved highlights to this page**. Choose the old saved conversation, select **Preview matches**, review the matched/missing/ambiguous passages, then choose **Confirm link to this page**. Closing the controls before confirmation makes no recovery copies. Preview rows appear in batches of 25. Load any lazy-loaded text before previewing for the most useful result.
+
+This works on regular supported HTTP(S) pages, including unlisted providers and moves between providers. Confirmation copies all selected-conversation records onto the destination with new IDs, preserving the originals, quotes, notes, colours and original capture URLs. Missing and ambiguous passages remain unresolved and are checked again as text loads. Recovery uses exact text and uniquely ranked surrounding context across the page, never old offsets or source message IDs to break a tie. The current list displays the recovery status; jumping to an unresolved copy reports that the passage is unavailable. Source records and the destination page are rechecked on confirmation; a changed preview must be regenerated.
+
+Copies are independently editable and removable using the ordinary highlight controls. Repeating a link skips copies already linked from that source conversation/highlight ID and keeps local edits; deleting a copy and explicitly linking again recreates it. This is a snapshot of the selected records, not a permanent URL alias or synchronization rule, so new source highlights require another link. No external requests or provider APIs are used for recovery.
+
+JSON backups that contain recovered highlights use format version 2 to preserve recovery provenance and conservative matching. Glint 0.3.0 accepts versions 1 and 2; earlier Glint releases reject version 2. Backups without recovered highlights remain version 1.
+
 Annotations contain exact text, surrounding context, text offsets, conversation URL, provider, message identity when exposed, colour, and note. Storage is partitioned by conversation; writes are serialized in the background. A per-message index limits restoration work for inserted provider messages. Text-node ranges are rendered through CSS Custom Highlights; application text is never wrapped or rewritten. A MutationObserver restores after message replacement, and history navigation triggers a conversation reload.
 
-The generic adapter uses the URL without its fragment. ChatGPT, Claude and Gemini adapters use origin and pathname, with provider message selectors. Selectors are best-effort and may require updates when those sites change. Messages without stable IDs use quote/context matching within candidate message roots. Identical messages without IDs can be ambiguous. Cross-message selections fall back to page scope. Changed quotations are left unresolved; clicking an unloaded passage reports that it must be loaded first.
+The generic adapter uses the full URL without its fragment. Recognized ChatGPT (`/c/{id}`), Claude (`/chat/{id}`), Gemini (`/app/{id}`) and DeepSeek (`/a/chat/s/{id}`) routes use the provider plus stable conversation ID. Project names, surrounding path segments, query parameters and ChatGPT's old hostname therefore do not split one conversation. Provider pages without a recognized conversation route retain their pathname identity, and unknown websites retain the generic URL identity.
+
+The first background operation after upgrading performs a one-time identity migration. It merges old provider URL keys into canonical conversation keys, deduplicates by highlight ID, rebuilds the library summary, writes canonical data before removing obsolete keys, and records the migration version. Records already under the canonical key take precedence if the same ID differs. The original capture URL remains in `originalUrl`; opening the conversation refreshes `url` to the latest working address for navigation. Imported JSON backups use the same normalization. Passage restoration still requires message identity and exact quote/context matching, so a shared conversation ID never authorizes an unrelated text match.
+
+Provider selectors are best-effort and may require updates when sites change. DeepSeek currently uses exposed `data-message-id` elements when present and otherwise falls back to page scope. Messages without stable IDs use quote/context matching within candidate message roots. Identical messages without IDs can be ambiguous. Cross-message selections fall back to page scope. Changed quotations are left unresolved; clicking an unloaded passage reports that it must be loaded first.
 
 ## Transfer and Chromium verification
 
@@ -81,7 +95,7 @@ Verified on macOS 14.8.9 with Helium 0.16.6.1 / Chromium 152.0.7977.82: installe
 - Expand Saved websites and multiple conversations; confirm counts, grouping and Show 25 more.
 - Navigate between conversations without a full page reload; verify sidebar and page highlights switch.
 - Replace a highlighted message DOM node, and remove/reinsert it; verify automatic restoration.
-- Test all three providers against current signed-in pages, including long lazy-loaded conversations.
+- Test ChatGPT, Claude, Gemini and DeepSeek against current signed-in pages, including long lazy-loaded conversations and provider/project URL changes.
 
 Only top-level HTTP(S) documents are supported. Browser-protected pages, form controls, editable areas, shadow DOM and iframe text are excluded. The extension requests access to web pages to restore highlights automatically, and tabs access to follow the active conversation. No analytics, remote services or synchronization are included.
 

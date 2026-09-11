@@ -248,8 +248,158 @@ try {
   );
   assert.equal((await send({ type: "export" })).backup.annotations.length, 0);
   assert.equal((await toPage({ type: "scroll", id: row.id })).ok, false);
+  const oldProjectUrl = "https://chatgpt.com/g/g-p-old-name/c/stable-chat-id";
+  const newProjectUrl = "https://chatgpt.com/g/g-p-new-name/c/stable-chat-id";
+  const legacyConversation = `chatgpt:${oldProjectUrl}`;
+  const canonicalConversation = "chatgpt:conversation:stable-chat-id";
+  const legacy = {
+    ...row,
+    id: "legacy-url",
+    conversation: legacyConversation,
+    provider: "chatgpt",
+    url: oldProjectUrl,
+  };
+  delete legacy.originalUrl;
+  const legacyData = { [`annotations:${legacyConversation}`]: [legacy] };
+  await evaluate(
+    transfer,
+    `(async () => { await chrome.storage.local.set(${JSON.stringify(legacyData)}); await chrome.storage.local.remove("identity-schema-version"); })()`,
+  );
+  assert.equal((await send({ type: "library" })).ok, true);
+  let migrated = (await send({ type: "export" })).backup.annotations.find(
+    (item) => item.id === "legacy-url",
+  );
+  assert.equal(migrated.conversation, canonicalConversation);
+  assert.equal(migrated.originalUrl, oldProjectUrl);
+  assert.equal(
+    (
+      await send({
+        type: "load",
+        conversation: canonicalConversation,
+        url: newProjectUrl,
+        title: "Renamed project",
+      })
+    ).ok,
+    true,
+  );
+  migrated = (await send({ type: "export" })).backup.annotations.find(
+    (item) => item.id === "legacy-url",
+  );
+  assert.equal(migrated.url, newProjectUrl);
+  assert.equal(migrated.originalUrl, oldProjectUrl);
+  assert.equal(
+    (
+      await send({
+        type: "delete",
+        conversation: canonicalConversation,
+        id: "legacy-url",
+      })
+    ).ok,
+    true,
+  );
   console.log(
-    "PASS: installed extension creation, recolour/note, reload restoration, text download, file import, deduplication, deletion.",
+    "PASS: installed extension creation, restoration, transfer, deletion, and renamed provider URL migration.",
+  );
+  const recoverySource = `web:${url}old`;
+  const seed = {
+    ...row,
+    id: "recover-original",
+    conversation: recoverySource,
+    url: `${url}old`,
+    originalUrl: `${url}old`,
+    note: "Original note",
+  };
+  assert.equal(
+    (
+      await send({
+        type: "save",
+        conversation: recoverySource,
+        annotation: seed,
+      })
+    ).ok,
+    true,
+  );
+  const sidebar = await page(`chrome-extension://${id}/sidebar.html`);
+  await command("Page.bringToFront", {}, source);
+  await until(() =>
+    evaluate(
+      sidebar,
+      `document.querySelector('.page-title')?.textContent === 'Glint smoke test'`,
+    ),
+  );
+  await evaluate(sidebar, `document.querySelector('.recovery').open = true`);
+  await until(() =>
+    evaluate(
+      sidebar,
+      `Array.from(document.querySelector('.recovery select')?.options || []).some(o => o.value === ${JSON.stringify(recoverySource)})`,
+    ),
+  );
+  await evaluate(
+    sidebar,
+    `(() => { const s = document.querySelector('.recovery select'); s.value = ${JSON.stringify(recoverySource)}; s.dispatchEvent(new Event('change')); document.querySelector('.recovery button').click(); })()`,
+  );
+  await until(() =>
+    evaluate(
+      sidebar,
+      `document.querySelector('.recovery [role=status]').textContent.includes('1 matched')`,
+    ),
+  );
+  await command(
+    "Emulation.setDeviceMetricsOverride",
+    { width: 400, height: 1100, deviceScaleFactor: 1, mobile: false },
+    sidebar,
+  );
+  await evaluate(
+    sidebar,
+    `document.querySelector('.recovery').scrollIntoView()`,
+  );
+  const screenshot = await command("Page.captureScreenshot", {}, sidebar);
+  await writeFile(
+    join(work, "recovery.png"),
+    Buffer.from(screenshot.data, "base64"),
+  );
+  assert.equal((await send({ type: "export" })).backup.annotations.length, 1); // Preview did not copy anything.
+  await evaluate(
+    sidebar,
+    `Array.from(document.querySelectorAll('.recovery button')).find(b => b.textContent === 'Confirm link to this page').click()`,
+  );
+  await until(() =>
+    evaluate(
+      sidebar,
+      `document.querySelector('.recovery [role=status]').textContent.includes('Linked 1 highlights')`,
+    ),
+  );
+  const recoveredBackup = (await send({ type: "export" })).backup;
+  assert.equal(recoveredBackup.version, 2);
+  assert.equal(recoveredBackup.annotations.length, 2);
+  const copy = recoveredBackup.annotations.find((a) => a.recovery);
+  assert.equal(copy.recovery.conversation, recoverySource);
+  assert.equal(copy.originalUrl, seed.url);
+  assert.equal(copy.conversation, row.conversation);
+  await command("Page.reload", {}, source);
+  await until(async () => {
+    try {
+      return (await toPage({ type: "scroll", id: copy.id })).ok;
+    } catch {
+      return false;
+    }
+  });
+  assert.equal(
+    (
+      await send({
+        type: "delete",
+        conversation: copy.conversation,
+        id: copy.id,
+      })
+    ).ok,
+    true,
+  );
+  assert.equal(
+    (await send({ type: "export" })).backup.annotations[0].note,
+    "Original note",
+  );
+  console.log(
+    "PASS: generic recovery UI preview, explicit confirmation, preserved original, strict reload restoration, and independent deletion.",
   );
   console.log(`Isolated test profile and generated exports: ${work}`);
 } finally {

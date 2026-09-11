@@ -119,7 +119,7 @@ test("malformed or unsafe imports are rejected before reading storage", async ()
   }
   assert.throws(
     () =>
-      validateBackup({ format: "glint-backup", version: 2, annotations: [] }),
+      validateBackup({ format: "glint-backup", version: 3, annotations: [] }),
     /version 1/,
   );
 });
@@ -134,6 +134,22 @@ test("reading exports include full quotes, notes and sources and escape Markdown
   assert.ok(md.includes("\\<script\\>"));
   assert.ok(md.includes("\\*\\*literal\\*\\*"));
   assert.ok(!md.includes("<script>"));
+});
+
+test("backup import canonicalizes a renamed provider URL and keeps its capture URL", () => {
+  const oldUrl = "https://chatgpt.com/g/g-p-old-name/c/stable-chat-id";
+  const row = {
+    ...annotation(),
+    conversation: `chatgpt:${oldUrl}`,
+    provider: "chatgpt",
+    url: oldUrl,
+  };
+  const [normalized] = validateBackup(
+    createBackup({ [keyFor(row.conversation)]: [row] }),
+  );
+  assert.equal(normalized.conversation, "chatgpt:conversation:stable-chat-id");
+  assert.equal(normalized.originalUrl, oldUrl);
+  assert.equal(normalized.url, oldUrl);
 });
 
 test("Chromium message channel awaits writes, exports existing records, enforces transfer page, and reports storage errors", async () => {
