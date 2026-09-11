@@ -1,4 +1,4 @@
-# Persistent Highlighter — decisions and agent handoff
+# Glint — decisions and agent handoff
 
 ## User intent and precedence
 
@@ -119,3 +119,5 @@ Reviewed 2026-09-10; these support platform/framework facts, not application-spe
 - 2026-09-11: `npm test` passed 8 tests covering anchors, page edits/custom-colour registration and cleanup, colour validation/contrast, index migration/write/delete, sidebar lazy loading and draft/focus preservation. `npm run check`, `npm run build`, and `git diff --check` passed. Used sample-data screenshots in headless Zen 1.22b on macOS 14.8.9 to inspect compact and expanded sidebar layouts plus the custom-colour palette and aligned removal icon. Installed-extension acceptance, native picker behaviour on live pages, signed-in providers and RAM profiling remain outstanding; observer/index lifecycle findings above are not addressed by this UI change. Existing untracked `persistent-highlighter.xpi` was left untouched; use the rebuilt `dist` for this version.
 
 - 2026-09-11: Rebuilt and replaced `persistent-highlighter.xpi` at the user’s request with the latest UI. Bumped manifest, package and lockfile versions to 0.1.1. `npm run build` passed; verified ZIP integrity, all seven root-level extension files byte-for-byte against `dist`, and matching versions. Package is unsigned; no external upload or signing was performed.
+
+- 2026-09-11: Continued the naming request with Glint after the user asked to proceed following a cancelled voice clarification. Renamed the manifest, toolbar/sidebar titles, panel branding, HTML title, npm package and README; added the tagline “Keep what catches your eye.” Bumped version to 0.1.2 and built `glint.xpi`; retained the previous `persistent-highlighter.xpi`. Preserved the Firefox extension ID `persistent-highlighter@local` and storage format for update continuity. `npm test` passed all 8 tests; `npm run check`, `npm run build` and `git diff --check` passed. Verified ZIP integrity and all seven package files byte-for-byte against `dist`, plus branding/version and unchanged extension ID. Live browser update acceptance remains pending; no upload, signing, name-availability check or RAM profiling was performed.

@@ -10,11 +10,11 @@ const drafts = new Map();
 const handlers = { change, jump, drafts };
 const header = element('header');
 const top = element('div', { className: 'header-top' });
-top.append(element('span', { className: 'eyebrow', text: 'PERSISTENT HIGHLIGHTER' }), element('button', { className: 'panel-button', text: isPopup ? 'Open sidebar' : 'Close sidebar', on: { click: () => {
+top.append(element('span', { className: 'eyebrow', text: 'GLINT' }), element('button', { className: 'panel-button', text: isPopup ? 'Open sidebar' : 'Close sidebar', on: { click: () => {
   const action = isPopup ? browser.sidebarAction.open() : browser.sidebarAction.close();
   action.then(() => { if (isPopup) window.close(); }).catch(showError);
 } } }));
-header.append(top, element('h1', { text: 'Your highlights' }), element('p', { className: 'intro', text: 'Good finds, easy to find again.' }));
+header.append(top, element('h1', { text: 'Your highlights' }), element('p', { className: 'intro', text: 'Keep what catches your eye.' }));
 const content = element('main', { className: 'content' });
 const notice = element('p', { className: 'notice', attrs: { role: 'status', hidden: '' } });
 const current = element('section', { className: 'current' });

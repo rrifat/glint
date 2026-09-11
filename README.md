@@ -1,4 +1,6 @@
-# Persistent Highlighter
+# Glint
+
+**Keep what catches your eye.**
 
 See [AGENTS.md](AGENTS.md) for the architecture decisions, memory requirements, known gaps and agent handoff. The sidebar uses plain JavaScript and CSS; do not add a UI framework without an explicit, documented need.
 
@@ -23,7 +25,9 @@ After updating the extension, run `npm run build`, reload the extension in `abou
 
 Run `npm test` for anchor, editing, colour, storage migration and sidebar tests and `npm run check` for JavaScript syntax checks. Rebuild and reload the temporary extension after changes. Temporary add-ons must be loaded again after restarting Firefox; use a signed package for permanent installation.
 
-The updated `persistent-highlighter.xpi` in the project root is an unsigned 0.1.1 package containing the latest build, ready for the next upload/signing step. It has not been uploaded automatically.
+The `glint.xpi` in the project root is the unsigned 0.1.2 package containing the latest build. The older `persistent-highlighter.xpi` is a previous release. No upload or signing has been performed.
+
+Glint was previously named Persistent Highlighter. Its Firefox extension ID and storage format remain unchanged so the rename preserves existing highlights when updating the same installation.
 
 ## How it works
 
