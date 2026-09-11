@@ -1,6 +1,7 @@
 import { adapterFor } from './adapters.js';
 import { createAnchor, resolveAnchor } from './anchors.js';
-import { COLORS, keyFor, readConversation } from './storage.js';
+import { keyFor, readConversation } from './storage.js';
+import { COLORS, colorValue, isColor, highlightName, textColor } from './colors.js';
 let adapter = adapterFor(); let conversation = adapter.identity();
 let annotations = []; let byMessage = new Map(); const ranges = new Map();
 let selected = null; let generation = 0;
@@ -8,24 +9,58 @@ let editingIds = [];
 const supported = !!globalThis.CSS?.highlights && typeof Highlight !== 'undefined';
 const host = document.createElement('div'); host.dataset.phUi = '';
 const shadow = host.attachShadow({ mode: 'closed' });
-shadow.innerHTML = `<style>:host{all:initial} .palette{position:fixed;z-index:2147483647;display:flex;gap:6px;padding:7px;background:#20252d;border:1px solid #646b78;border-radius:12px;box-shadow:0 4px 20px #0005}button{width:26px;height:26px;border:2px solid transparent;border-radius:50%;cursor:pointer}button:focus-visible{outline:2px solid white;outline-offset:2px}.status{position:fixed;bottom:20px;left:20px;background:#20252d;color:white;padding:12px;border-radius:8px;font:14px system-ui;z-index:2147483647}[hidden]{display:none!important}</style><div class="palette" role="toolbar" aria-label="Highlight colour" hidden></div><div class="status" role="status" hidden></div>`;
+shadow.innerHTML = `<style>
+:host{all:initial}.palette{position:fixed;z-index:2147483647;width:288px;max-width:calc(100vw - 16px);padding:12px;background:#fff;color:#252b36;border:1px solid #dce0e8;border-radius:14px;box-shadow:0 6px 28px #0003;font:13px/1.4 system-ui;box-sizing:border-box}
+.caption{font-size:11px;font-weight:650;color:#646c7a;margin-bottom:9px}.swatches{display:flex;gap:5px;flex-wrap:wrap}button,input{font:inherit;box-sizing:border-box}button{cursor:pointer}.swatch{width:28px;height:28px;border:1px solid #0002;border-radius:50%;background:var(--swatch);display:grid;place-items:center;padding:0;color:var(--ink)}.swatch[aria-pressed=true]::after{content:'✓';font-weight:bold;font-size:17px}.swatch:hover{transform:scale(1.08)}button:focus-visible,input:focus-visible{outline:2px solid #5269b2;outline-offset:3px}.custom-toggle{margin-top:10px;border:1px solid #dce0e8;border-radius:7px;background:#f7f8fb;padding:6px 10px;color:inherit;width:100%;text-align:left}.custom{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px}.custom input[type=color]{width:32px;height:30px;padding:2px;border:1px solid #c7ced9;border-radius:5px}.custom input[type=text]{width:96px;min-width:0;padding:5px;border:1px solid #c7ced9;border-radius:5px}.apply{background:#344968;color:white;border:0;border-radius:5px;padding:6px 10px}.remove{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;margin-top:11px;padding:9px 4px 0;border:0;border-top:1px solid #e7e9ee;background:none;color:#a03339;font-size:12px}.remove svg{width:15px;height:15px;flex:none;display:block}.status{position:fixed;bottom:20px;left:20px;background:#20252d;color:white;padding:12px;border-radius:8px;font:14px system-ui;z-index:2147483647}[hidden]{display:none!important}
+</style><div class="palette" role="group" aria-label="Highlight controls" hidden><div class="caption">Highlight colour</div><div class="swatches" role="group" aria-label="Preset colours"></div><button class="custom-toggle" aria-expanded="false">Custom colour…</button><div class="custom" hidden><input type="color" value="#ffe082" aria-label="Custom colour picker"><input type="text" value="#ffe082" aria-label="Custom colour hex code" spellcheck="false" maxlength="7"><button class="apply">Apply</button></div></div><div class="status" role="status" hidden></div>`;
 document.documentElement.append(host);
 const palette = shadow.querySelector('.palette'); const status = shadow.querySelector('.status');
+const custom = shadow.querySelector('.custom');
+const picker = custom.querySelector('[type=color]'); const hex = custom.querySelector('[type=text]');
+const customToggle = shadow.querySelector('.custom-toggle');
 let statusTimer;
-function notify(message) { status.textContent = message; status.hidden = false; clearTimeout(statusTimer); statusTimer = setTimeout(() => status.hidden = true, 3500); }
-const swatches = ['#ffe082', '#a7e8b5', '#a9d5ff', '#ffc1df'];
-COLORS.forEach((color, i) => { const button = document.createElement('button'); button.style.background = swatches[i]; button.title = `Highlight ${color}`; button.setAttribute('aria-label', button.title); button.addEventListener('mousedown', event => event.preventDefault()); button.addEventListener('click', () => void save(color)); palette.append(button); });
-const removeButton = document.createElement('button');
-removeButton.textContent = '×'; removeButton.title = 'Remove highlight'; removeButton.setAttribute('aria-label', 'Remove highlight');
-removeButton.style.cssText = 'background:white;color:#20252d;font-size:20px'; removeButton.hidden = true;
+function notify(message) { status.textContent = message; status.hidden = false; clearTimeout(statusTimer); statusTimer = setTimeout(() => status.hidden = true, 5000); }
+COLORS.forEach(color => {
+  const button = document.createElement('button'); button.className = 'swatch'; button.dataset.color = color;
+  button.style.setProperty('--swatch', colorValue(color)); button.style.setProperty('--ink', textColor(color));
+  button.title = `Highlight ${color}`; button.setAttribute('aria-label', button.title);
+  button.addEventListener('mousedown', event => event.preventDefault());
+  button.addEventListener('click', () => void save(color)); shadow.querySelector('.swatches').append(button);
+});
+let paletteRect; let paletteConversation;
+function positionPalette() {
+  if (!paletteRect) return;
+  const bounds = palette.getBoundingClientRect();
+  palette.style.left = `${Math.max(8, Math.min(innerWidth - bounds.width - 8, paletteRect.left))}px`;
+  const below = paletteRect.bottom + 8;
+  palette.style.top = `${Math.max(8, Math.min(innerHeight - bounds.height - 8, below))}px`;
+}
+customToggle.addEventListener('click', () => {
+  custom.hidden = !custom.hidden; customToggle.setAttribute('aria-expanded', String(!custom.hidden));
+  positionPalette(); if (!custom.hidden) hex.focus();
+});
+picker.addEventListener('input', () => { hex.value = picker.value; hex.removeAttribute('aria-invalid'); });
+hex.addEventListener('input', () => { if (/^#[\da-f]{6}$/i.test(hex.value)) picker.value = hex.value; hex.removeAttribute('aria-invalid'); });
+function applyCustom() {
+  if (!/^#[\da-f]{6}$/i.test(hex.value)) { hex.setAttribute('aria-invalid', 'true'); notify('Enter a six-digit hex colour, such as #a9d5ff.'); hex.focus(); return; }
+  void save(hex.value.toLowerCase());
+}
+custom.querySelector('.apply').addEventListener('click', applyCustom);
+hex.addEventListener('keydown', event => { if (event.key === 'Enter') applyCustom(); });
+const removeButton = document.createElement('button'); removeButton.className = 'remove';
+removeButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5"/></svg><span>Remove highlight</span>';
+removeButton.title = 'Remove highlight'; removeButton.setAttribute('aria-label', 'Remove highlight'); removeButton.hidden = true;
 removeButton.addEventListener('mousedown', event => event.preventDefault());
 removeButton.addEventListener('click', () => void editHighlights('delete'));
 palette.append(removeButton);
 function showPalette(rect) {
   removeButton.hidden = !editingIds.length;
-  palette.hidden = false;
-  palette.style.left = `${Math.max(8, Math.min(innerWidth - 190, rect.left))}px`;
-  palette.style.top = `${Math.max(8, Math.min(innerHeight - 52, rect.bottom + 8))}px`;
+  removeButton.querySelector('span').textContent = editingIds.length > 1 ? `Remove ${editingIds.length} highlights` : 'Remove highlight';
+  const colors = new Set(annotations.filter(a => editingIds.includes(a.id)).map(a => a.color));
+  for (const button of shadow.querySelectorAll('.swatch')) button.setAttribute('aria-pressed', String(colors.size === 1 && colors.has(button.dataset.color)));
+  if (colors.size === 1) { picker.value = colorValue([...colors][0]); hex.value = picker.value; }
+  custom.hidden = true; customToggle.setAttribute('aria-expanded', 'false');
+  paletteConversation = conversation; paletteRect = rect; palette.hidden = false; positionPalette();
 }
 function selectedHighlights(range) {
   return annotations.filter(a => {
@@ -34,9 +69,11 @@ function selectedHighlights(range) {
   }).map(a => a.id);
 }
 async function editHighlights(type, color) {
+  if (adapter.identity() !== conversation || paletteConversation !== conversation) { dismissPalette(); await reload(); notify('The page changed. Select the passage again.'); return; }
+  const ids = [...editingIds]; const targetConversation = conversation;
   try {
-    for (const id of editingIds) {
-      const result = await browser.runtime.sendMessage({ type, conversation, id, color });
+    for (const id of ids) {
+      const result = await browser.runtime.sendMessage({ type, conversation: targetConversation, id, color });
       if (!result?.ok) throw new Error('Could not save the change. Reload the extension and page.');
     }
     editingIds = []; selected = null; palette.hidden = true; getSelection()?.removeAllRanges();
@@ -49,7 +86,7 @@ function capture() {
   if (!selection?.rangeCount || selection.isCollapsed) { palette.hidden = true; selected = null; return; }
   const range = selection.getRangeAt(0);
   const element = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
-  if (element?.closest('input,textarea,[contenteditable]:not([contenteditable="false"])') || host.contains(element)) return;
+  if (element?.closest('input,textarea,[contenteditable]:not([contenteditable="false"])') || host.contains(element)) { dismissPalette(); return; }
   selected = range.cloneRange();
   editingIds = selectedHighlights(range);
   showPalette(range.getBoundingClientRect());
@@ -65,18 +102,19 @@ document.addEventListener('mouseup', event => {
   }).map(a => a.id);
   if (editingIds.length) showPalette({ left: event.clientX, bottom: event.clientY });
 });
-function dismissPalette() { palette.hidden = true; selected = null; editingIds = []; }
-document.addEventListener('keyup', event => { if (event.key === 'Escape') dismissPalette(); else if (event.shiftKey) capture(); });
+function dismissPalette() { palette.hidden = true; selected = null; editingIds = []; paletteRect = null; paletteConversation = null; }
+document.addEventListener('keyup', event => { if (event.key === 'Escape') dismissPalette(); else if (!event.composedPath().includes(host) && event.shiftKey) capture(); });
 document.addEventListener('scroll', dismissPalette, true);
-addEventListener('blur', dismissPalette);
+addEventListener('blur', () => { if (custom.hidden && document.activeElement !== host) dismissPalette(); });
 async function save(color = 'yellow') {
-  if (adapter.identity() !== conversation) { dismissPalette(); await reload(); }
+  if (!isColor(color)) return;
+  if (adapter.identity() !== conversation || (paletteConversation && paletteConversation !== conversation)) { dismissPalette(); await reload(); notify('The page changed. Select the passage again.'); return; }
   if (editingIds.length) return editHighlights('update', color);
   try {
     if (adapter.identity() !== conversation) await reload();
     if (!supported) throw new Error('Highlights require Firefox 140 or later.');
     const selection = getSelection();
-    const range = selection?.rangeCount && !selection.isCollapsed ? selection.getRangeAt(0).cloneRange() : selected;
+    const range = selected || (selection?.rangeCount && !selection.isCollapsed ? selection.getRangeAt(0).cloneRange() : null);
     if (!range || !range.startContainer.isConnected) throw new Error('Select some text first.');
     let root = adapter.root(range.startContainer);
     if (!root.contains(range.endContainer)) root = document.body;
@@ -89,9 +127,25 @@ async function save(color = 'yellow') {
     palette.hidden = true; selected = null; selection?.removeAllRanges(); notify('Highlight saved');
   } catch (error) { notify(error.message); }
 }
+const customStyle = document.createElement('style'); customStyle.dataset.phUi = '';
+document.documentElement.append(customStyle);
+const registered = new Set();
 function register() {
   if (!supported) return;
-  for (const color of COLORS) CSS.highlights.set(`ph-${color}`, new Highlight(...annotations.filter(a => a.color === color).map(a => ranges.get(a.id)).filter(r => r?.startContainer.isConnected && r?.endContainer.isConnected)));
+  const groups = new Map(COLORS.map(color => [highlightName(color), []]));
+  const customColors = new Set();
+  for (const annotation of annotations) {
+    if (!isColor(annotation.color)) continue;
+    const range = ranges.get(annotation.id); if (!range?.startContainer.isConnected || !range?.endContainer.isConnected) continue;
+    const name = highlightName(annotation.color);
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(range);
+    if (annotation.color.startsWith('#')) customColors.add(colorValue(annotation.color));
+  }
+  const rules = [...customColors].map(color => `::highlight(${highlightName(color)}){background-color:${color};color:${textColor(color)}}`).join('\n');
+  if (customStyle.textContent !== rules) customStyle.textContent = rules;
+  for (const name of registered) if (!groups.has(name)) { CSS.highlights.delete(name); registered.delete(name); }
+  for (const [name, validRanges] of groups) { CSS.highlights.set(name, new Highlight(...validRanges)); registered.add(name); }
 }
 function restore(root) {
   const id = adapter.messageId(root);

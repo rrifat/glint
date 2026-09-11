@@ -1,79 +1,155 @@
-import { COLORS } from './storage.js';
+import { keyFor, readConversation, LIBRARY_KEY } from './storage.js';
+import { element, reconcile, website, makeList } from './sidebar-ui.js';
 
 const app = document.getElementById('app');
 const isPopup = location.search === '?popup';
-if (isPopup) document.body.style.width = '360px';
-let state = { rows: [], conversation: '', title: 'Your highlights', error: '', tabId: null };
-let refreshVersion = 0;
-let refreshTimer;
-
-function element(tag, { className, text, attrs = {}, on } = {}) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
-  if (on) for (const [event, handler] of Object.entries(on)) node.addEventListener(event, handler);
-  return node;
-}
-
-function card(annotation, current) {
-  const article = element('article'); article.style.setProperty('--accent', `var(--${annotation.color})`);
-  article.append(element('button', { className: 'quote', text: annotation.anchor.exact, attrs: { type: 'button', title: 'Go to passage' }, on: { click: () => void jump(annotation) } }));
-  if (!current) article.append(element('p', { className: 'source', text: annotation.title || annotation.url }));
-  const controls = element('div', { className: 'actions' }); const colourLabel = element('label', { text: 'Colour ' });
-  const select = element('select', { attrs: { 'aria-label': 'Highlight colour' } });
-  for (const colour of COLORS) select.append(element('option', { text: colour, attrs: { value: colour, ...(colour === annotation.color ? { selected: '' } : {}) } }));
-  select.addEventListener('change', event => void change(annotation, { color: event.currentTarget.value }));
-  colourLabel.append(select); controls.append(colourLabel);
-  controls.append(element('button', { className: 'delete', text: 'Delete', attrs: { type: 'button' }, on: { click: () => void change(annotation, {}, 'delete') } }));
-  article.append(controls);
-  const noteLabel = element('label', { className: 'note', text: 'Note' });
-  const note = element('textarea', { attrs: { 'aria-label': 'Highlight note', placeholder: 'Add a thought…' } }); note.value = annotation.note || '';
-  note.addEventListener('change', event => void change(annotation, { note: event.currentTarget.value })); noteLabel.append(note); article.append(noteLabel);
-  return article;
-}
-
-function render() {
-  const current = state.rows.filter(a => a.conversation === state.conversation);
-  const others = state.rows.filter(a => a.conversation !== state.conversation);
-  app.replaceChildren();
-  const header = element('header'); header.append(element('div', { className: 'eyebrow', text: 'PERSISTENT HIGHLIGHTER' }), element('h1', { text: 'Worth keeping.' }), element('p', { text: 'Select a passage. Pick a colour. Come back to it.' }));
-  header.append(element('button', { text: isPopup ? 'Open sidebar' : 'Close sidebar', on: { click: () => {
-    const action = isPopup ? browser.sidebarAction.open() : browser.sidebarAction.close();
-    action.then(() => { if (isPopup) window.close(); }).catch(error => { state.error = error.message; render(); });
-  } } }));
-  const shortcut = element('kbd', { text: 'Alt + Shift + H' }); header.append(shortcut, document.createTextNode(' '), element('span', { className: 'shortcut', text: 'quick highlight' })); app.append(header);
-  const content = element('section', { className: 'content' });
-  if (state.error) content.append(element('p', { className: 'notice', text: state.error, attrs: { role: 'status' } }));
-  const heading = element('h2', { text: 'This conversation ' }); heading.append(element('span', { text: String(current.length) })); content.append(heading, element('p', { className: 'page-title', text: state.title }));
-  if (!current.length) { const empty = element('div', { className: 'empty', text: 'Your next good find belongs here.' }); empty.append(element('small', { text: 'Select text on the page to save your first highlight.' })); content.append(empty); }
-  for (const annotation of current) content.append(card(annotation, true));
-  if (others.length) { const otherHeading = element('h2', { className: 'other', text: 'Other pages ' }); otherHeading.append(element('span', { text: String(others.length) })); content.append(otherHeading); for (const annotation of others) content.append(card(annotation, false)); }
-  app.append(content);
-}
+if (isPopup) document.body.classList.add('popup');
+let state = { conversation: '', tabId: null };
+let refreshVersion = 0, libraryVersion = 0, refreshTimer;
+const drafts = new Map();
+const handlers = { change, jump, drafts };
+const header = element('header');
+const top = element('div', { className: 'header-top' });
+top.append(element('span', { className: 'eyebrow', text: 'PERSISTENT HIGHLIGHTER' }), element('button', { className: 'panel-button', text: isPopup ? 'Open sidebar' : 'Close sidebar', on: { click: () => {
+  const action = isPopup ? browser.sidebarAction.open() : browser.sidebarAction.close();
+  action.then(() => { if (isPopup) window.close(); }).catch(showError);
+} } }));
+header.append(top, element('h1', { text: 'Your highlights' }), element('p', { className: 'intro', text: 'Good finds, easy to find again.' }));
+const content = element('main', { className: 'content' });
+const notice = element('p', { className: 'notice', attrs: { role: 'status', hidden: '' } });
+const current = element('section', { className: 'current' });
+const currentHeading = element('h2', { text: 'Current conversation' });
+const currentCount = element('span', { className: 'count' }); currentHeading.append(currentCount);
+const source = element('p', { className: 'website-name' });
+const title = element('p', { className: 'page-title' });
+const empty = element('div', { className: 'empty', text: 'Select a passage to keep it here.' });
+empty.append(element('small', { text: 'Pick a colour, or press Alt + Shift + H.' }));
+let currentList = makeList({ ...handlers, current: true });
+current.append(currentHeading, source, title, empty, currentList.node);
+const library = element('details', { className: 'library' });
+const librarySummary = element('summary', { text: 'Saved websites' });
+const libraryBody = element('div'); library.append(librarySummary, libraryBody);
+const sites = new Map(); const conversations = new Map();
+let summaries = [];
+library.addEventListener('toggle', () => {
+  if (library.open) void refreshLibrary();
+  else { ++libraryVersion; summaries = []; sites.clear(); conversations.clear(); libraryBody.replaceChildren(); }
+});
+content.append(notice, current, library); app.append(header, content);
+function showError(error) { notice.textContent = error.message || String(error); notice.hidden = false; }
 
 async function refresh() {
   const version = ++refreshVersion;
   try {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    const context = tab?.id ? await browser.tabs.sendMessage(tab.id, { type: 'context' }).catch(() => null) : null;
-    const data = await browser.storage.local.get(null);
+    const context = tab?.id != null ? await browser.tabs.sendMessage(tab.id, { type: 'context' }).catch(() => null) : null;
+    const rows = context ? await readConversation(context.conversation) : [];
     if (version !== refreshVersion) return;
-    state = { rows: Object.entries(data).filter(([key]) => key.startsWith('annotations:')).flatMap(([, value]) => value).sort((a, b) => b.createdAt - a.createdAt), conversation: context?.conversation || '', title: context?.title || 'Your highlights', tabId: tab?.id ?? null, error: context ? '' : 'Open a web page to highlight text. Firefox internal and protected pages are unavailable.' };
-  } catch (error) { state = { ...state, error: error.message }; }
-  render();
+    if (state.conversation !== context?.conversation) {
+      currentList.node.remove(); currentList = makeList({ ...handlers, current: true }); current.append(currentList.node);
+    }
+    state = { conversation: context?.conversation || '', tabId: tab?.id ?? null };
+    source.textContent = website(tab?.url); title.textContent = context?.title || tab?.title || 'Open a web page to get started';
+    title.title = title.textContent; currentCount.textContent = String(rows.length); empty.hidden = rows.length > 0;
+    currentList.update(rows);
+    if (!context) { empty.textContent = 'Highlights are unavailable on this page. Open a regular website to get started.'; }
+    else if (!rows.length) { empty.textContent = 'Select a passage to keep it here.'; empty.append(element('small', { text: 'Pick a colour, or press Alt + Shift + H.' })); }
+    if (library.open) await refreshLibrary();
+  } catch (error) { if (version === refreshVersion) showError(error); }
 }
 
+function conversationView(summary) {
+  const node = element('details', { className: 'conversation' });
+  const heading = element('summary'); const name = element('span', { className: 'conversation-title' });
+  const count = element('span', { className: 'count' }); heading.append(name, count);
+  const body = element('div', { className: 'conversation-body' }); node.append(heading, body);
+  let list = null, version = 0, record = summary;
+  const view = { node, update(next) { record = next; name.textContent = next.title || next.url; name.title = next.url; count.textContent = String(next.count); }, async load() {
+    const token = ++version;
+    if (!node.open) return;
+    try {
+      const rows = await readConversation(record.conversation);
+      if (version !== token || !node.open || !node.isConnected) return;
+      if (!list) {
+        list = makeList(handlers);
+        body.replaceChildren(element('p', { className: 'muted', text: 'Select a quote to open its page.' }), list.node);
+      }
+      list.update(rows);
+    } catch (error) { showError(error); }
+  } };
+  node.addEventListener('toggle', () => {
+    if (node.open) void view.load();
+    else { ++version; list = null; body.replaceChildren(); }
+  });
+  view.update(summary); return view;
+}
+function renderLibrary() {
+  const groups = new Map();
+  for (const summary of summaries.filter(item => item.conversation !== state.conversation).sort((a, b) => b.updatedAt - a.updatedAt)) {
+    const host = website(summary.url);
+    if (!groups.has(host)) groups.set(host, []);
+    groups.get(host).push(summary);
+  }
+  const valid = new Set([...groups.values()].flat().map(item => item.conversation));
+  for (const id of conversations.keys()) if (!valid.has(id)) conversations.delete(id);
+  for (const host of sites.keys()) if (!groups.has(host)) sites.delete(host);
+  const nodes = [];
+  for (const [host, items] of groups) {
+    if (!sites.has(host)) {
+      const node = element('details', { className: 'website' });
+      const summary = element('summary');
+      const badge = element('span', { className: 'site-badge', text: host[0].toUpperCase(), attrs: { 'aria-hidden': 'true' } });
+      const label = element('span', { className: 'site-label' }); label.append(element('strong', { text: host }));
+      const meta = element('small'); label.append(meta);
+      summary.append(badge, label); const body = element('div', { className: 'website-body' }); node.append(summary, body);
+      node.addEventListener('toggle', () => {
+        if (!node.open) for (const child of body.children) child.open = false;
+      });
+      sites.set(host, { node, meta, body });
+    }
+    const site = sites.get(host);
+    site.meta.textContent = `${items.length} ${items.length === 1 ? 'conversation' : 'conversations'} · ${items.reduce((n, item) => n + item.count, 0)} highlights`;
+    reconcile(site.body, items.map(item => {
+      if (!conversations.has(item.conversation)) conversations.set(item.conversation, conversationView(item));
+      const view = conversations.get(item.conversation); view.update(item); return view.node;
+    }));
+    nodes.push(site.node);
+  }
+  if (!nodes.length) nodes.push(element('p', { className: 'muted', text: 'Highlights from other conversations will appear here, grouped by website.' }));
+  reconcile(libraryBody, nodes);
+}
+async function refreshLibrary() {
+  const version = ++libraryVersion;
+  try {
+    const result = await browser.runtime.sendMessage({ type: 'library' });
+    if (!result?.ok) throw new Error('Could not load saved websites.');
+    if (version !== libraryVersion || !library.open) return;
+    summaries = result.summaries; renderLibrary();
+    await Promise.all([...conversations.values()].filter(view => view.node.open).map(view => view.load()));
+  } catch (error) { showError(error); }
+}
 function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => void refresh(), 50); }
-async function change(annotation, patch, type = 'update') { try { const result = await browser.runtime.sendMessage({ type, conversation: annotation.conversation, id: annotation.id, ...patch }); if (!result?.ok) throw new Error('Could not save the change. Reload the extension and page.'); await refresh(); } catch (error) { state = { ...state, error: error.message }; render(); } }
+async function change(annotation, patch, type = 'update') {
+  try {
+    const result = await browser.runtime.sendMessage({ type, conversation: annotation.conversation, id: annotation.id, ...patch });
+    if (!result?.ok) throw new Error('Could not save the change. Reload the extension and page.');
+    if (type === 'delete') drafts.delete(annotation.id);
+    await refresh(); return true;
+  } catch (error) { showError(error); return false; }
+}
 async function jump(annotation) {
   try {
     if (annotation.conversation !== state.conversation) { await browser.tabs.create({ url: annotation.url }); return; }
-    const result = await browser.tabs.sendMessage(state.tabId, { type: 'scroll', id: annotation.id }); if (!result.ok) { state = { ...state, error: result.reason }; render(); }
-  } catch { state = { ...state, error: 'Reload the page and try again.' }; render(); }
+    const result = await browser.tabs.sendMessage(state.tabId, { type: 'scroll', id: annotation.id });
+    if (!result?.ok) showError(result?.reason || 'Passage is not loaded or its text has changed.');
+    else if (isPopup) window.close();
+  } catch { showError('Reload the page and try again.'); }
 }
-
 browser.tabs.onActivated.addListener(scheduleRefresh);
-browser.tabs.onUpdated.addListener((tabId, changeInfo) => { if (tabId === state.tabId && (changeInfo.status || changeInfo.url)) scheduleRefresh(); });
-browser.storage.onChanged.addListener((changes, area) => { if (area === 'local' && Object.keys(changes).some(key => key.startsWith('annotations:'))) scheduleRefresh(); });
+browser.tabs.onUpdated.addListener((tabId, info) => { if (tabId === state.tabId && (info.status === 'complete' || info.url)) scheduleRefresh(); });
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (changes[keyFor(state.conversation)]) scheduleRefresh();
+  else if (library.open && (changes[LIBRARY_KEY] || [...conversations].some(([id, view]) => view.node.open && changes[keyFor(id)]))) void refreshLibrary();
+});
 void refresh();

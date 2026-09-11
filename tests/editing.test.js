@@ -41,11 +41,25 @@ test('select, recolour and remove on the page without creating duplicates', asyn
     select(); ui.querySelector('[aria-label="Highlight blue"]').click(); await settle();
     assert.equal(rows.length, 1); assert.equal(rows[0].color, 'blue');
     assert.equal(w.CSS.highlights.get('ph-yellow').size, 0); assert.equal(w.CSS.highlights.get('ph-blue').size, 1);
+    // Custom colours update the existing annotation and register a safe dynamic rule.
+    select(); ui.querySelector('.custom-toggle').click();
+    const hex = ui.querySelector('[aria-label="Custom colour hex code"]'); hex.value = '#bad';
+    ui.querySelector('.apply').click(); await settle();
+    assert.equal(rows[0].color, 'blue'); assert.equal(hex.getAttribute('aria-invalid'), 'true');
+    hex.value = '#123456';
+    // A native picker may blur the page; keep the captured selection until Apply.
+    w.dispatchEvent(new w.Event('blur'));
+    ui.querySelector('.apply').click(); await settle();
+    assert.equal(rows.length, 1); assert.equal(rows[0].color, '#123456');
+    assert.equal(w.CSS.highlights.get('ph-custom-123456').size, 1);
+    assert.match(w.document.querySelector('style[data-ph-ui]').textContent, /background-color:#123456;color:#ffffff/);
     // A click on an existing highlight exposes removal, even with no selection.
     w.document.querySelector('p').dispatchEvent(new w.MouseEvent('mouseup', { bubbles: true, clientX: 20, clientY: 20 }));
     const remove = ui.querySelector('[aria-label="Remove highlight"]'); assert.equal(remove.hidden, false);
     remove.click(); await settle();
     assert.equal(rows.length, 0); assert.equal(w.CSS.highlights.get('ph-blue').size, 0);
-    assert.deepEqual(messages.map(m => m.type), ['save', 'update', 'delete']);
+    assert.equal(w.CSS.highlights.has('ph-custom-123456'), false);
+    assert.equal(w.document.querySelector('style[data-ph-ui]').textContent, '');
+    assert.deepEqual(messages.map(m => m.type), ['save', 'update', 'update', 'delete']);
   } finally { observers.forEach(observer => observer.disconnect()); w.close(); }
 });

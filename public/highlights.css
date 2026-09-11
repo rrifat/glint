@@ -2,3 +2,7 @@
 ::highlight(ph-green) { background-color: #a7e8b5; color: #102016; }
 ::highlight(ph-blue) { background-color: #a9d5ff; color: #102030; }
 ::highlight(ph-pink) { background-color: #ffc1df; color: #301020; }
+::highlight(ph-orange) { background-color: #ffc591; color: #181c24; }
+::highlight(ph-purple) { background-color: #d5c2ff; color: #181c24; }
+::highlight(ph-teal) { background-color: #9de0dc; color: #181c24; }
+::highlight(ph-peach) { background-color: #ffd5bd; color: #181c24; }
