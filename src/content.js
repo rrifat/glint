@@ -1,3 +1,4 @@
+import { createPdfLayerTracker } from "./pdf-layers.js";
 import { adapterFor } from "./adapters.js";
 import { browser, onMessage } from "./browser.js";
 import {
@@ -307,6 +308,7 @@ const customStyle = document.createElement("style");
 customStyle.dataset.phUi = "";
 document.documentElement.append(customStyle);
 const registered = new Set();
+const updatePdfLayers = createPdfLayerTracker();
 function register() {
   if (!supported) return;
   const groups = new Map(COLORS.map((color) => [highlightName(color), []]));
@@ -322,10 +324,11 @@ function register() {
     if (annotation.color.startsWith("#"))
       customColors.add(colorValue(annotation.color));
   }
+  updatePdfLayers([...groups.values()].flat());
   const rules = [...customColors]
     .map(
       (color) =>
-        `::highlight(${highlightName(color)}){background-color:${color};color:${textColor(color)}}`,
+        `::highlight(${highlightName(color)}){background-color:${color}66;}`,
     )
     .join("\n");
   if (customStyle.textContent !== rules) customStyle.textContent = rules;
@@ -506,3 +509,6 @@ onMessage((msg) => {
 });
 addEventListener("popstate", () => void reload());
 void reload().catch((error) => notify(error.message));
+
+addEventListener("pagehide", () => updatePdfLayers([]));
+addEventListener("pageshow", (event) => { if (event.persisted) register(); });

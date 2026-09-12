@@ -1,8 +1,13 @@
-::highlight(ph-yellow) { background-color: #ffe082; color: #201b10; }
-::highlight(ph-green) { background-color: #a7e8b5; color: #102016; }
-::highlight(ph-blue) { background-color: #a9d5ff; color: #102030; }
-::highlight(ph-pink) { background-color: #ffc1df; color: #301020; }
-::highlight(ph-orange) { background-color: #ffc591; color: #181c24; }
-::highlight(ph-purple) { background-color: #d5c2ff; color: #181c24; }
-::highlight(ph-teal) { background-color: #9de0dc; color: #181c24; }
-::highlight(ph-peach) { background-color: #ffd5bd; color: #181c24; }
+/* Translucent backgrounds preserve PDF canvas text beneath transparent text layers. */
+::highlight(ph-yellow) { background-color: #ffd60066; }
+::highlight(ph-green) { background-color: #20cf5566; }
+::highlight(ph-blue) { background-color: #2495ff66; }
+::highlight(ph-pink) { background-color: #ff409c66; }
+::highlight(ph-orange) { background-color: #ff850a66; }
+::highlight(ph-purple) { background-color: #a366ff66; }
+::highlight(ph-teal) { background-color: #00bdb066; }
+::highlight(ph-peach) { background-color: #ff996666; }
+
+/* Multiply preserves dark PDF glyphs instead of painting a pale veil over them.
+   Only active canvas-backed PDF text layers receive this marker. */
+[data-glint-pdf-highlight] { mix-blend-mode: multiply; }

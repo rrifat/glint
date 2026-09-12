@@ -112,7 +112,7 @@ test("select, recolour and remove on the page without creating duplicates", asyn
     assert.equal(w.CSS.highlights.get("ph-custom-123456").size, 1);
     assert.match(
       w.document.querySelector("style[data-ph-ui]").textContent,
-      /background-color:#123456;color:#ffffff/,
+      /background-color:#12345666;\}/,
     );
     // A click on an existing highlight exposes removal, even with no selection.
     w.document

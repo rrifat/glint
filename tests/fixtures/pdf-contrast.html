@@ -1,0 +1,63 @@
+<!doctype html><meta charset="utf-8" /><link
+    rel="stylesheet"
+    href="../../public/highlights.css"
+/><style>
+    body {
+        font: 18px Arial;
+        background: white;
+        color: black;
+        margin: 30px;
+    }
+    .page {
+        position: relative;
+        width: 700px;
+        height: 95px;
+        margin-bottom: 20px;
+    }
+    .textLayer {
+        position: absolute;
+        inset: 0;
+    }
+    .textLayer span {
+        position: absolute;
+        top: 20px;
+        left: 10px;
+        color: transparent;
+        font: 32px Arial;
+    }
+</style>
+<h2>Unhighlighted / previous / blended</h2>
+<script>
+    for (const mode of ["baseline", "previous", "blended"]) {
+        const page = document.createElement("div");
+        page.className = "page";
+        const canvas = document.createElement("canvas");
+        canvas.width = 700;
+        canvas.height = 95;
+        page.append(canvas);
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, 700, 95);
+        ctx.fillStyle = "black";
+        ctx.font = "32px Arial";
+        ctx.textBaseline = "top";
+        ctx.fillText("Readable PDF text: bold and italic", 10, 20);
+        const layer = document.createElement("div");
+        layer.className = "textLayer";
+        layer.innerHTML = "<span>Readable PDF text: bold and italic</span>";
+        page.append(layer);
+        document.body.append(page);
+        if (mode !== "baseline") {
+            const range = document.createRange();
+            range.selectNodeContents(layer.firstChild);
+            let highlight = CSS.highlights.get("ph-yellow");
+            if (!highlight) {
+                highlight = new Highlight();
+                CSS.highlights.set("ph-yellow", highlight);
+            }
+            highlight.add(range);
+        }
+        if (mode === "blended")
+            layer.setAttribute("data-glint-pdf-highlight", "");
+    }
+</script>

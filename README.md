@@ -40,7 +40,7 @@ Export/import is manual transfer, not ongoing synchronization. Browser-managed `
 
 ## Highlight controls
 
-Choose from eight colours: yellow, orange, pink, purple, blue, teal, green and peach. **Custom colour…** opens a native picker and a six-digit hex field; choose **Apply** to save it. Custom colours persist and use light or dark text according to their contrast.
+Choose from eight colours: yellow, orange, pink, purple, blue, teal, green and peach. **Custom colour…** opens a native picker and a six-digit hex field; choose **Apply** to save it. Presets use saturated colours for a stronger tint. Preset and custom highlights apply only a translucent background colour, preserving the page’s original text colour and typography. Custom colours persist. Active canvas-backed PDF.js/React-PDF text layers use multiply blending so dark PDF lettering stays dark beneath the highlight. The marker is removed when highlights are cleared or the layer is detached. A synthetic canvas/text-layer comparison in Zen confirms the contrast improvement; actual ChatGPT PDF preview acceptance remains pending.
 
 Click coloured text (or select it again) to change its colour or choose the labelled **Remove highlight** action, separated from the swatches. If several highlights overlap, the action applies to all of them. This removes highlights; there is no undo history.
 
@@ -52,7 +52,7 @@ After updating the extension, run `npm run build`, reload the extension in `abou
 
 Run `npm test` for anchor, editing, colour, storage migration and sidebar tests and `npm run check` for JavaScript syntax checks. Rebuild and reload the temporary extension after changes. Temporary add-ons must be loaded again after restarting Firefox; use a signed package for permanent installation.
 
-Version 0.3.0 packages are `glint-0.3.0-firefox.xpi` (unsigned) and `glint-0.3.0-chromium.zip` (extract before loading unpacked). Older packages may remain locally and are ignored by Git. No upload or signing has been performed.
+Version 0.3.1 packages are `glint-0.3.1-firefox.xpi` (unsigned) and `glint-0.3.1-chromium.zip` (extract before loading unpacked). Older packages may remain locally and are ignored by Git. No upload or signing has been performed.
 
 Glint was previously named Persistent Highlighter. Its Firefox extension ID and storage format remain unchanged so the rename preserves existing highlights when updating the same installation.
 
@@ -88,7 +88,7 @@ Verified on macOS 14.8.9 with Helium 0.16.6.1 / Chromium 152.0.7977.82: installe
 
 - Highlight a selection crossing bold/inline text; reload and check restoration.
 - Try the keyboard shortcut and selection context menu.
-- Try all eight colours and custom hex values, including very dark colours; reload and check appearance.
+- Try all eight colours and custom hex values; reload and check appearance. Check passages containing bold, italics, links and inline code: text formatting, spacing and line breaks should remain unchanged. Choose backgrounds that are readable with the page’s existing text colour.
 - Check palette placement near viewport edges and keyboard focus, including the native colour picker.
 - Expand a card, change colour, choose **Save note**, and remove from the sidebar; verify after reload.
 - Edit a note while another highlight changes; confirm focus and the unsaved draft survive.

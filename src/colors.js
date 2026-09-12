@@ -1,12 +1,12 @@
 export const SWATCHES = {
-  yellow: "#ffe082",
-  orange: "#ffc591",
-  pink: "#ffc1df",
-  purple: "#d5c2ff",
-  blue: "#a9d5ff",
-  teal: "#9de0dc",
-  green: "#a7e8b5",
-  peach: "#ffd5bd",
+  yellow: "#ffd600",
+  orange: "#ff850a",
+  pink: "#ff409c",
+  purple: "#a366ff",
+  blue: "#2495ff",
+  teal: "#00bdb0",
+  green: "#20cf55",
+  peach: "#ff9966",
 };
 export const COLORS = Object.keys(SWATCHES);
 export const isColor = (color) =>
