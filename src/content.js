@@ -1,4 +1,5 @@
 import { createPdfLayerTracker } from "./pdf-layers.js";
+import { loadSavedColors, deleteSavedColor } from "./saved-colors.js";
 import { adapterFor } from "./adapters.js";
 import { browser, onMessage } from "./browser.js";
 import {
@@ -49,7 +50,7 @@ function notify(message) {
   clearTimeout(statusTimer);
   statusTimer = setTimeout(() => (status.hidden = true), 5000);
 }
-COLORS.forEach((color) => {
+function swatch(color) {
   const button = document.createElement("button");
   button.className = "swatch";
   button.dataset.color = color;
@@ -59,8 +60,74 @@ COLORS.forEach((color) => {
   button.setAttribute("aria-label", button.title);
   button.addEventListener("mousedown", (event) => event.preventDefault());
   button.addEventListener("click", () => void save(color));
-  shadow.querySelector(".swatches").append(button);
-});
+  return button;
+}
+COLORS.forEach((color) =>
+  shadow.querySelector(".swatches").append(swatch(color)),
+);
+const savedSection = document.createElement("div");
+savedSection.hidden = true;
+savedSection.style.marginTop = "10px";
+const savedCaption = document.createElement("div");
+savedCaption.className = "caption";
+savedCaption.textContent = "Saved custom colours";
+const savedSwatches = document.createElement("div");
+savedSwatches.className = "swatches";
+savedSwatches.style.maxHeight = "112px";
+savedSwatches.style.overflowY = "auto";
+savedSwatches.setAttribute("aria-label", "Saved custom colours");
+savedSection.append(savedCaption, savedSwatches);
+customToggle.before(savedSection);
+let savedRequest = 0;
+async function refreshSavedColors() {
+  const request = ++savedRequest;
+  try {
+    const colors = await loadSavedColors();
+    if (request !== savedRequest || palette.hidden) return;
+    const active = new Set(
+      annotations
+        .filter((a) => editingIds.includes(a.id))
+        .map((a) => colorValue(a.color)),
+    );
+    savedSwatches.replaceChildren(
+      ...colors.map((color) => {
+        const button = swatch(color);
+        button.setAttribute(
+          "aria-pressed",
+          String(active.size === 1 && active.has(color)),
+        );
+        const entry = document.createElement("span");
+        entry.style.cssText = "display:flex;align-items:center;gap:2px";
+        const remove = document.createElement("button");
+        remove.textContent = "×";
+        remove.title = `Delete saved colour ${color}`;
+        remove.setAttribute("aria-label", remove.title);
+        remove.style.cssText =
+          "background:none;border:0;padding:5px;color:inherit";
+        remove.addEventListener("mousedown", (event) => event.preventDefault());
+        remove.addEventListener("click", async () => {
+          remove.disabled = true;
+          try {
+            await deleteSavedColor(color);
+            await refreshSavedColors();
+            customToggle.focus();
+            notify("Saved colour deleted. Existing highlights are unchanged.");
+          } catch (error) {
+            notify(error.message);
+            remove.disabled = false;
+          }
+        });
+        entry.append(button, remove);
+        return entry;
+      }),
+    );
+    savedSection.hidden = !colors.length;
+    positionPalette();
+  } catch (error) {
+    notify(error.message);
+  }
+}
+custom.querySelector(".apply").textContent = "Apply & save";
 let paletteRect;
 let paletteConversation;
 function positionPalette() {
@@ -130,6 +197,7 @@ function showPalette(rect) {
   paletteConversation = conversation;
   paletteRect = rect;
   palette.hidden = false;
+  void refreshSavedColors();
   positionPalette();
 }
 function selectedHighlights(range) {
@@ -328,7 +396,7 @@ function register() {
   const rules = [...customColors]
     .map(
       (color) =>
-        `::highlight(${highlightName(color)}){background-color:${color}66;}`,
+        `::highlight(${highlightName(color)}){background-color:${color};color:${textColor(color) === "#ffffff" ? "#ffffff" : "#000000"};}\n:is(.textLayer,.react-pdf__Page__textContent) ::highlight(${highlightName(color)}),:is(.textLayer,.react-pdf__Page__textContent)::highlight(${highlightName(color)}){background-color:${color}66;color:transparent;}`,
     )
     .join("\n");
   if (customStyle.textContent !== rules) customStyle.textContent = rules;
@@ -511,4 +579,6 @@ addEventListener("popstate", () => void reload());
 void reload().catch((error) => notify(error.message));
 
 addEventListener("pagehide", () => updatePdfLayers([]));
-addEventListener("pageshow", (event) => { if (event.persisted) register(); });
+addEventListener("pageshow", (event) => {
+  if (event.persisted) register();
+});

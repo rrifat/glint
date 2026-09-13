@@ -40,7 +40,11 @@ Export/import is manual transfer, not ongoing synchronization. Browser-managed `
 
 ## Highlight controls
 
-Choose from eight colours: yellow, orange, pink, purple, blue, teal, green and peach. **Custom colour…** opens a native picker and a six-digit hex field; choose **Apply** to save it. Presets use saturated colours for a stronger tint. Preset and custom highlights apply only a translucent background colour, preserving the page’s original text colour and typography. Custom colours persist. Active canvas-backed PDF.js/React-PDF text layers use multiply blending so dark PDF lettering stays dark beneath the highlight. The marker is removed when highlights are cleared or the layer is detached. A synthetic canvas/text-layer comparison in Zen confirms the contrast improvement; actual ChatGPT PDF preview acceptance remains pending.
+Choose from eight colours: yellow, orange, pink, purple, blue, teal, green and peach. **Custom colour…** opens a native picker and a six-digit hex field; choose **Apply & save** to apply and remember it. Saved custom colours appear in the page palette and sidebar colour menu across conversations in this browser profile, even after their highlights are deleted. Previously used custom colours are collected once from existing highlights when this feature is first used. Saved palettes are local and are not included in JSON transfers.
+
+Ordinary text uses solid highlight backgrounds so light and dark page backgrounds do not dilute the selected colour. Highlighted text uses contrasting black or white lettering based on the chosen colour; typography remains unchanged. Recognised PDF.js/React-PDF text layers retain transparent lettering and 40% background opacity to preserve underlying canvas artwork. Active canvas-backed layers also retain multiply blending for dark PDF lettering. Actual ChatGPT PDF preview and dark/recoloured PDF acceptance remain pending.
+
+Delete a saved custom colour with its × button in the page palette or under **Manage saved colours** in a sidebar editor. This removes only the reusable swatch; existing highlights keep their colour. Applying that custom colour again saves it again.
 
 Click coloured text (or select it again) to change its colour or choose the labelled **Remove highlight** action, separated from the swatches. If several highlights overlap, the action applies to all of them. This removes highlights; there is no undo history.
 
@@ -52,7 +56,7 @@ After updating the extension, run `npm run build`, reload the extension in `abou
 
 Run `npm test` for anchor, editing, colour, storage migration and sidebar tests and `npm run check` for JavaScript syntax checks. Rebuild and reload the temporary extension after changes. Temporary add-ons must be loaded again after restarting Firefox; use a signed package for permanent installation.
 
-Version 0.3.1 packages are `glint-0.3.1-firefox.xpi` (unsigned) and `glint-0.3.1-chromium.zip` (extract before loading unpacked). Older packages may remain locally and are ignored by Git. No upload or signing has been performed.
+Version 0.3.3 packages are `glint-0.3.3-firefox.xpi` (unsigned) and `glint-0.3.3-chromium.zip` (extract before loading unpacked). Older packages may remain locally and are ignored by Git. No upload or signing has been performed.
 
 Glint was previously named Persistent Highlighter. Its Firefox extension ID and storage format remain unchanged so the rename preserves existing highlights when updating the same installation.
 

@@ -20,6 +20,7 @@ test("select, recolour and remove on the page without creating duplicates", asyn
   });
   const w = dom.window;
   const rows = [];
+  let savedColors = ["#123456"];
   const messages = [];
   const observers = [];
   const Observer = w.MutationObserver;
@@ -54,6 +55,10 @@ test("select, recolour and remove on the page without creating duplicates", asyn
       onMessage: { addListener() {} },
       sendMessage: async (msg) => {
         messages.push(msg);
+        if (msg.type === "saved-colors")
+          return { ok: true, colors: [...savedColors] };
+        if (msg.type === "delete-saved-color")
+          savedColors = savedColors.filter((color) => color !== msg.color);
         if (msg.type === "load")
           return { ok: true, rows: structuredClone(rows) };
         if (msg.type === "save") rows.push(structuredClone(msg.annotation));
@@ -82,6 +87,8 @@ test("select, recolour and remove on the page without creating duplicates", asyn
         .dispatchEvent(new w.MouseEvent("mouseup", { bubbles: true }));
     };
     select();
+    await settle();
+    assert.ok(ui.querySelector('[aria-label="Highlight #123456"]'));
     ui.querySelector('[aria-label="Highlight yellow"]').click();
     await settle();
     assert.equal(rows.length, 1);
@@ -112,19 +119,26 @@ test("select, recolour and remove on the page without creating duplicates", asyn
     assert.equal(w.CSS.highlights.get("ph-custom-123456").size, 1);
     assert.match(
       w.document.querySelector("style[data-ph-ui]").textContent,
-      /background-color:#12345666;\}/,
+      /background-color:#12345666;color:transparent;\}/,
+    );
+    assert.match(
+      w.document.querySelector("style[data-ph-ui]").textContent,
+      /^::highlight\(ph-custom-123456\)\{background-color:#123456;color:#ffffff;\}/,
     );
     // A click on an existing highlight exposes removal, even with no selection.
-    w.document
-      .querySelector("p")
-      .dispatchEvent(
-        new w.MouseEvent("mouseup", {
-          bubbles: true,
-          clientX: 20,
-          clientY: 20,
-        }),
-      );
+    w.document.querySelector("p").dispatchEvent(
+      new w.MouseEvent("mouseup", {
+        bubbles: true,
+        clientX: 20,
+        clientY: 20,
+      }),
+    );
     const remove = ui.querySelector('[aria-label="Remove highlight"]');
+    await settle();
+    ui.querySelector('[aria-label="Delete saved colour #123456"]').click();
+    await settle();
+    assert.equal(ui.querySelector('[aria-label="Highlight #123456"]'), null);
+    assert.equal(rows[0].color, "#123456");
     assert.equal(remove.hidden, false);
     remove.click();
     await settle();

@@ -5,11 +5,18 @@ import { createBackup, importChanges } from "./transfer.js";
 import { adapterFor, stableConversationIdentity } from "./adapters.js";
 import { ensureIdentityMigration } from "./identity-migration.js";
 import { recover } from "./recovery-background.js";
+import {
+  SAVED_COLORS_KEY,
+  customColors,
+  readSavedColors,
+} from "./saved-colors.js";
 let queue = Promise.resolve();
 onMessage((msg, sender) => {
   if (
     ![
       "save",
+      "saved-colors",
+      "delete-saved-color",
       "update",
       "delete",
       "load",
@@ -23,6 +30,24 @@ onMessage((msg, sender) => {
     return;
   const task = queue.then(async () => {
     await ensureIdentityMigration(browser.storage.local);
+    if (msg.type === "delete-saved-color") {
+      const [color] = customColors([msg.color]);
+      if (!color) throw new Error("Invalid custom colour");
+      const colors = await readSavedColors(browser.storage.local);
+      await browser.storage.local.set({
+        [SAVED_COLORS_KEY]: colors.filter((saved) => saved !== color),
+      });
+      return;
+    }
+    if (msg.type === "saved-colors") {
+      const colors = await readSavedColors(browser.storage.local);
+      const stored = (await browser.storage.local.get(SAVED_COLORS_KEY))[
+        SAVED_COLORS_KEY
+      ];
+      if (!Array.isArray(stored))
+        await browser.storage.local.set({ [SAVED_COLORS_KEY]: colors });
+      return { colors };
+    }
     if (msg.type === "recovery-preview" || msg.type === "recovery-confirm")
       return recover(msg, sender);
     if (msg.type === "load") {
@@ -127,6 +152,13 @@ onMessage((msg, sender) => {
     }
     const index = (await browser.storage.local.get(LIBRARY_KEY))[LIBRARY_KEY];
     const changes = { [keyFor(msg.conversation)]: rows };
+    const appliedColor = msg.type === "save" ? msg.annotation.color : msg.color;
+    if (customColors([appliedColor]).length) {
+      changes[SAVED_COLORS_KEY] = customColors([
+        ...(await readSavedColors(browser.storage.local)),
+        appliedColor,
+      ]);
+    }
     if (index) {
       const summaries = index.filter(
         (item) => item.conversation !== msg.conversation,

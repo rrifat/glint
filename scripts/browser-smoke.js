@@ -192,6 +192,51 @@ try {
   const edited = (await send({ type: "export" })).backup;
   assert.equal(edited.annotations[0].color, "#123456");
   assert.equal(edited.annotations[0].note, "Read on iPhone");
+  assert.deepEqual((await send({ type: "saved-colors" })).colors, ["#123456"]);
+  await until(() =>
+    evaluate(
+      source,
+      `document.querySelector('style[data-ph-ui]')?.textContent.includes('ph-custom-123456')`,
+    ),
+  );
+  const paints = await evaluate(
+    source,
+    `(() => {
+    document.body.style.backgroundColor = 'black';
+    document.body.style.color = 'white';
+    const paragraph = document.querySelector('p');
+    const normal = getComputedStyle(paragraph, '::highlight(ph-custom-123456)').backgroundColor;
+    const preset = getComputedStyle(paragraph, '::highlight(ph-yellow)').backgroundColor;
+    const ink = getComputedStyle(paragraph, '::highlight(ph-custom-123456)').color;
+    const presetInk = getComputedStyle(paragraph, '::highlight(ph-yellow)').color;
+    const layer = document.createElement('div'); layer.className = 'textLayer';
+    const span = document.createElement('span'); span.textContent = 'PDF fixture';
+    layer.append(span); document.body.append(layer);
+    const pdf = getComputedStyle(span, '::highlight(ph-custom-123456)').backgroundColor;
+    const pdfPreset = getComputedStyle(span, '::highlight(ph-yellow)').backgroundColor;
+    const pdfInk = getComputedStyle(span, '::highlight(ph-custom-123456)').color;
+    layer.remove();
+    return { normal, preset, pdf, pdfPreset, ink, presetInk, pdfInk };
+  })()`,
+  );
+  assert.deepEqual(paints, {
+    normal: "rgb(18, 52, 86)",
+    preset: "rgb(255, 214, 0)",
+    pdf: "rgba(18, 52, 86, 0.4)",
+    pdfPreset: "rgba(255, 214, 0, 0.4)",
+    ink: "rgb(255, 255, 255)",
+    presetInk: "rgb(0, 0, 0)",
+    pdfInk: "rgba(0, 0, 0, 0)",
+  });
+  assert.equal(
+    (await send({ type: "delete-saved-color", color: "#123456" })).ok,
+    true,
+  );
+  assert.deepEqual((await send({ type: "saved-colors" })).colors, []);
+  assert.equal(
+    (await send({ type: "export" })).backup.annotations[0].color,
+    "#123456",
+  );
   await evaluate(transfer, 'document.getElementById("text").click()');
   const textFile = await until(async () =>
     (await readdir(downloads)).find((name) => name.endsWith(".txt")),

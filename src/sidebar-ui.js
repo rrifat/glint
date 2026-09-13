@@ -1,4 +1,5 @@
 import { COLORS, colorValue, colorName } from "./colors.js";
+import { loadSavedColors, deleteSavedColor } from "./saved-colors.js";
 
 export function element(tag, { className, text, attrs = {}, on = {} } = {}) {
   const node = document.createElement(tag);
@@ -56,6 +57,65 @@ export function makeCard(initial, { change, jump, drafts, current = false }) {
       element("option", { text: "Custom…", attrs: { value: "custom" } }),
     );
     const colourLabel = element("label", { text: "Colour " });
+    const savedStatus = element("span", {
+      className: "muted",
+      attrs: { role: "status" },
+    });
+    const savedManager = element("details");
+    savedManager.append(element("summary", { text: "Manage saved colours" }));
+    const savedRows = element("div");
+    savedManager.append(savedRows);
+    async function refreshColors() {
+      try {
+        const colors = await loadSavedColors();
+        const value = select.value;
+        for (const option of select.querySelectorAll("[data-saved]"))
+          option.remove();
+        for (const color of colors)
+          select.append(
+            element("option", {
+              text: `Saved ${color}`,
+              attrs: { value: color, "data-saved": "" },
+            }),
+          );
+        select.value = [...select.options].some(
+          (option) => option.value === value,
+        )
+          ? value
+          : "custom";
+        if (picker) picker.hidden = select.value !== "custom";
+        savedRows.replaceChildren(
+          ...colors.map((color) =>
+            element("button", {
+              text: `Delete ${color}`,
+              attrs: { "aria-label": `Delete saved colour ${color}` },
+              on: {
+                click: async (event) => {
+                  const button = event.currentTarget;
+                  button.disabled = true;
+                  try {
+                    await deleteSavedColor(color);
+                    await refreshColors();
+                    savedManager.querySelector("summary").focus();
+                    savedStatus.textContent =
+                      "Saved colour deleted. Existing highlights are unchanged.";
+                  } catch (error) {
+                    savedStatus.textContent = error.message;
+                    button.disabled = false;
+                  }
+                },
+              },
+            }),
+          ),
+        );
+        savedManager.hidden = !colors.length;
+        savedStatus.textContent = "Custom colours are saved for reuse.";
+      } catch (error) {
+        savedStatus.textContent = error.message;
+      }
+    }
+    void refreshColors();
+    select.addEventListener("focus", () => void refreshColors());
     colourLabel.append(select);
     picker = element("input", {
       attrs: { type: "color", "aria-label": "Custom highlight colour" },
@@ -66,13 +126,15 @@ export function makeCard(initial, { change, jump, drafts, current = false }) {
         void change(annotation, { color: select.value });
       else picker.focus();
     });
-    picker.addEventListener(
-      "change",
-      () => void change(annotation, { color: picker.value }),
-    );
+    picker.addEventListener("change", async () => {
+      if (await change(annotation, { color: picker.value }))
+        await refreshColors();
+    });
     controls.append(
       colourLabel,
       picker,
+      savedStatus,
+      savedManager,
       element("button", {
         className: "remove",
         text: "Remove",
@@ -137,7 +199,11 @@ export function makeCard(initial, { change, jump, drafts, current = false }) {
         : "Edit highlight";
     dot.title = colorName(next.color);
     if (select && document.activeElement !== select)
-      select.value = COLORS.includes(next.color) ? next.color : "custom";
+      select.value = [...select.options].some(
+        (option) => option.value === next.color,
+      )
+        ? next.color
+        : "custom";
     if (picker && document.activeElement !== picker) {
       picker.value = colorValue(next.color);
       picker.hidden = select.value !== "custom";

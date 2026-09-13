@@ -1,13 +1,81 @@
-/* Translucent backgrounds preserve PDF canvas text beneath transparent text layers. */
-::highlight(ph-yellow) { background-color: #ffd60066; }
-::highlight(ph-green) { background-color: #20cf5566; }
-::highlight(ph-blue) { background-color: #2495ff66; }
-::highlight(ph-pink) { background-color: #ff409c66; }
-::highlight(ph-orange) { background-color: #ff850a66; }
-::highlight(ph-purple) { background-color: #a366ff66; }
-::highlight(ph-teal) { background-color: #00bdb066; }
-::highlight(ph-peach) { background-color: #ff996666; }
+/* Solid backgrounds reproduce the selected colour on ordinary pages. */
+::highlight(ph-yellow) {
+    background-color: #ffd600;
+    color: #000000;
+}
+::highlight(ph-green) {
+    background-color: #20cf55;
+    color: #000000;
+}
+::highlight(ph-blue) {
+    background-color: #2495ff;
+    color: #000000;
+}
+::highlight(ph-pink) {
+    background-color: #ff409c;
+    color: #000000;
+}
+::highlight(ph-orange) {
+    background-color: #ff850a;
+    color: #000000;
+}
+::highlight(ph-purple) {
+    background-color: #a366ff;
+    color: #000000;
+}
+::highlight(ph-teal) {
+    background-color: #00bdb0;
+    color: #000000;
+}
+::highlight(ph-peach) {
+    background-color: #ff9966;
+    color: #000000;
+}
+
+/* Preserve canvas artwork beneath transparent PDF text. */
+:is(.textLayer, .react-pdf__Page__textContent)::highlight(ph-yellow),
+:is(.textLayer, .react-pdf__Page__textContent) ::highlight(ph-yellow) {
+    background-color: #ffd60066;
+    color: transparent;
+}
+:is(.textLayer, .react-pdf__Page__textContent)::highlight(ph-green),
+:is(.textLayer, .react-pdf__Page__textContent) ::highlight(ph-green) {
+    background-color: #20cf5566;
+    color: transparent;
+}
+:is(.textLayer, .react-pdf__Page__textContent)::highlight(ph-blue),
+:is(.textLayer, .react-pdf__Page__textContent) ::highlight(ph-blue) {
+    background-color: #2495ff66;
+    color: transparent;
+}
+:is(.textLayer, .react-pdf__Page__textContent)::highlight(ph-pink),
+:is(.textLayer, .react-pdf__Page__textContent) ::highlight(ph-pink) {
+    background-color: #ff409c66;
+    color: transparent;
+}
+:is(.textLayer, .react-pdf__Page__textContent)::highlight(ph-orange),
+:is(.textLayer, .react-pdf__Page__textContent) ::highlight(ph-orange) {
+    background-color: #ff850a66;
+    color: transparent;
+}
+:is(.textLayer, .react-pdf__Page__textContent)::highlight(ph-purple),
+:is(.textLayer, .react-pdf__Page__textContent) ::highlight(ph-purple) {
+    background-color: #a366ff66;
+    color: transparent;
+}
+:is(.textLayer, .react-pdf__Page__textContent)::highlight(ph-teal),
+:is(.textLayer, .react-pdf__Page__textContent) ::highlight(ph-teal) {
+    background-color: #00bdb066;
+    color: transparent;
+}
+:is(.textLayer, .react-pdf__Page__textContent)::highlight(ph-peach),
+:is(.textLayer, .react-pdf__Page__textContent) ::highlight(ph-peach) {
+    background-color: #ff996666;
+    color: transparent;
+}
 
 /* Multiply preserves dark PDF glyphs instead of painting a pale veil over them.
    Only active canvas-backed PDF text layers receive this marker. */
-[data-glint-pdf-highlight] { mix-blend-mode: multiply; }
+[data-glint-pdf-highlight] {
+    mix-blend-mode: multiply;
+}

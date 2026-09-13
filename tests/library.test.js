@@ -90,6 +90,25 @@ test("on-demand library migration preserves records and tracks custom-colour wri
       color: "#123456",
     });
     assert.equal(data["annotations:https://example.com/a"][0].color, "#123456");
+    assert.deepEqual(data["saved-custom-colors-v1"], ["#123456"]);
+    await Promise.all(
+      ["#ABCDEF", "#abcdef"].map((color) =>
+        listener({
+          type: "update",
+          conversation: "https://example.com/a",
+          id: "1",
+          color,
+        }),
+      ),
+    );
+    assert.deepEqual(data["saved-custom-colors-v1"], ["#123456", "#abcdef"]);
+    await listener({ type: "delete-saved-color", color: "#ABCDEF" });
+    assert.deepEqual(data["saved-custom-colors-v1"], ["#123456"]);
+    assert.equal(data["annotations:https://example.com/a"][0].color, "#abcdef");
+    await assert.rejects(
+      listener({ type: "delete-saved-color", color: "yellow" }),
+      /Invalid custom colour/,
+    );
     await assert.rejects(
       listener({
         type: "update",
@@ -105,6 +124,12 @@ test("on-demand library migration preserves records and tracks custom-colour wri
       id: "1",
     });
     assert.equal((await listener({ type: "library" })).summaries.length, 0);
+    const scansBefore = scans;
+    assert.deepEqual(
+      Array.from((await listener({ type: "saved-colors" })).colors),
+      ["#123456"],
+    );
+    assert.equal(scans, scansBefore, "saved colours do not rescan the library");
   } finally {
     dom.window.close();
   }
@@ -156,6 +181,8 @@ test("sidebar loads groups on demand, bounds cards, and preserves focused note d
     },
     runtime: {
       sendMessage: async (msg) => {
+        if (msg.type === "saved-colors")
+          return { ok: true, colors: ["#123456"] };
         if (msg.type === "load") {
           const key = `annotations:${msg.conversation}`;
           reads.push(key);
@@ -195,6 +222,10 @@ test("sidebar loads groups on demand, bounds cards, and preserves focused note d
     editor.open = true;
     await settle();
     const note = editor.querySelector("textarea");
+    assert.equal(
+      editor.querySelector('option[value="#123456"]').textContent,
+      "Saved #123456",
+    );
     note.focus();
     note.value = "Unfinished thought";
     note.setSelectionRange(4, 4);
