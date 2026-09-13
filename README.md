@@ -56,7 +56,7 @@ After updating the extension, run `npm run build`, reload the extension in `abou
 
 Run `npm test` for anchor, editing, colour, storage migration and sidebar tests and `npm run check` for JavaScript syntax checks. Rebuild and reload the temporary extension after changes. Temporary add-ons must be loaded again after restarting Firefox; use a signed package for permanent installation.
 
-Version 0.3.3 packages are `glint-0.3.3-firefox.xpi` (unsigned) and `glint-0.3.3-chromium.zip` (extract before loading unpacked). Older packages may remain locally and are ignored by Git. No upload or signing has been performed.
+Version 0.3.4 packages are `glint-0.3.4-firefox.xpi` (unsigned) and `glint-0.3.4-chromium.zip` (extract before loading unpacked). Older packages may remain locally and are ignored by Git. No upload or signing has been performed.
 
 Glint was previously named Persistent Highlighter. Its Firefox extension ID and storage format remain unchanged so the rename preserves existing highlights when updating the same installation.
 
@@ -78,7 +78,9 @@ The generic adapter uses the full URL without its fragment. Recognized ChatGPT (
 
 The first background operation after upgrading performs a one-time identity migration. It merges old provider URL keys into canonical conversation keys, deduplicates by highlight ID, rebuilds the library summary, writes canonical data before removing obsolete keys, and records the migration version. Records already under the canonical key take precedence if the same ID differs. The original capture URL remains in `originalUrl`; opening the conversation refreshes `url` to the latest working address for navigation. Imported JSON backups use the same normalization. Passage restoration still requires message identity and exact quote/context matching, so a shared conversation ID never authorizes an unrelated text match.
 
-Provider selectors are best-effort and may require updates when sites change. DeepSeek currently uses exposed `data-message-id` elements when present and otherwise falls back to page scope. Messages without stable IDs use quote/context matching within candidate message roots. Identical messages without IDs can be ambiguous. Cross-message selections fall back to page scope. Changed quotations are left unresolved; clicking an unloaded passage reports that it must be loaded first.
+Provider selectors are best-effort and may require updates when sites change. DeepSeek currently uses exposed `data-message-id` elements when present and otherwise falls back to page scope. Messages without stable IDs require an exact quote and saved prefix/suffix with one unique occurrence across loaded candidate messages; offsets do not break ties between messages. Identical passages with identical context remain unresolved, and changed context can also prevent restoration. This applies to existing records without a migration. Cross-message selections fall back to page scope. Changed quotations are left unresolved; clicking an unloaded passage reports that it must be loaded first.
+
+Version 0.3.4 fixes ID-less message matches overwriting one another during restoration. Changes to a captured selection now produce a visible retry message, and stale ranges cannot be used to recolour or remove a passage. Mutation processing runs 150 ms after the first queued change even during continuous streaming; this bounds the scheduling delay, not the duration of a large restoration batch. Anonymous-message resolution shares one temporary text index per root. Gemini-shaped DOM regression tests cover repeated quotations, adding/deleting highlights, removal/reinsertion, ambiguous passages, stale selections and streaming. Live signed-in Gemini/Zen verification remains outstanding. Reload the extension and existing pages after updating.
 
 ## Transfer and Chromium verification
 

@@ -5,6 +5,7 @@ import { browser, onMessage } from "./browser.js";
 import {
   createAnchor,
   resolveAnchor,
+  resolveAnonymous,
   textIndex,
   rangeFromMatch,
 } from "./anchors.js";
@@ -25,6 +26,7 @@ let annotations = [];
 let byMessage = new Map();
 const ranges = new Map();
 let selected = null;
+let selectedText = null;
 let generation = 0;
 let editingIds = [];
 const supported =
@@ -205,12 +207,32 @@ function selectedHighlights(range) {
     .filter((a) => {
       const saved = ranges.get(a.id);
       return (
-        saved &&
+        validRange(saved, a.anchor.exact) &&
         range.compareBoundaryPoints(Range.START_TO_END, saved) > 0 &&
         range.compareBoundaryPoints(Range.END_TO_START, saved) < 0
       );
     })
     .map((a) => a.id);
+}
+function validRange(range, exact) {
+  if (
+    !range ||
+    range.collapsed ||
+    !range.startContainer.isConnected ||
+    !range.endContainer.isConnected
+  )
+    return false;
+  if (range.toString() === exact) return true;
+  // Anchors omit scripts/editable text even when the DOM Range crosses them.
+  const node = range.commonAncestorContainer;
+  try {
+    return (
+      createAnchor(node.nodeType === 1 ? node : node.parentElement, range)
+        .exact === exact
+    );
+  } catch {
+    return false;
+  }
 }
 async function editHighlights(type, color) {
   if (
@@ -223,6 +245,17 @@ async function editHighlights(type, color) {
     return;
   }
   const ids = [...editingIds];
+  if (
+    (selected && !validRange(selected, selectedText)) ||
+    ids.some((id) => {
+      const row = annotations.find((a) => a.id === id);
+      return !row || !validRange(ranges.get(id), row.anchor.exact);
+    })
+  ) {
+    dismissPalette();
+    notify("The passage changed. Select it again.");
+    return;
+  }
   const targetConversation = conversation;
   try {
     for (const id of ids) {
@@ -238,9 +271,7 @@ async function editHighlights(type, color) {
             "Could not save the change. Reload the extension and page.",
         );
     }
-    editingIds = [];
-    selected = null;
-    palette.hidden = true;
+    dismissPalette();
     getSelection()?.removeAllRanges();
     await reload();
     notify(type === "delete" ? "Highlight removed" : "Colour updated");
@@ -252,8 +283,7 @@ function capture() {
   editingIds = [];
   const selection = getSelection();
   if (!selection?.rangeCount || selection.isCollapsed) {
-    palette.hidden = true;
-    selected = null;
+    dismissPalette();
     return;
   }
   const range = selection.getRangeAt(0);
@@ -271,6 +301,7 @@ function capture() {
     return;
   }
   selected = range.cloneRange();
+  selectedText = range.toString();
   editingIds = selectedHighlights(range);
   showPalette(range.getBoundingClientRect());
 }
@@ -283,7 +314,7 @@ document.addEventListener("mouseup", (event) => {
     .filter((a) => {
       const range = ranges.get(a.id);
       return (
-        range &&
+        validRange(range, a.anchor.exact) &&
         [...range.getClientRects()].some(
           (rect) =>
             event.clientX >= rect.left &&
@@ -300,6 +331,7 @@ document.addEventListener("mouseup", (event) => {
 function dismissPalette() {
   palette.hidden = true;
   selected = null;
+  selectedText = null;
   editingIds = [];
   paletteRect = null;
   paletteConversation = null;
@@ -333,12 +365,14 @@ async function save(color = "yellow") {
       (selection?.rangeCount && !selection.isCollapsed
         ? selection.getRangeAt(0).cloneRange()
         : null);
-    if (!range || !range.startContainer.isConnected)
-      throw new Error("Select some text first.");
+    if (!validRange(range, selected ? selectedText : range?.toString())) {
+      dismissPalette();
+      throw new Error("The selection changed. Select the passage again.");
+    }
     let root = adapter.root(range.startContainer);
     if (!root.contains(range.endContainer)) root = document.body;
     const anchor = createAnchor(root, range);
-    if (!anchor.exact.trim()) return;
+    if (!anchor.exact.trim()) throw new Error("Select readable page text.");
     const annotation = {
       id: crypto.randomUUID(),
       conversation,
@@ -364,10 +398,13 @@ async function save(color = "yellow") {
           "Could not save the highlight. Reload the extension and page.",
       );
     await reload();
-    palette.hidden = true;
-    selected = null;
+    dismissPalette();
     selection?.removeAllRanges();
-    notify("Highlight saved");
+    notify(
+      ranges.has(annotation.id)
+        ? "Highlight saved"
+        : "Highlight saved, but the passage is ambiguous or unavailable.",
+    );
   } catch (error) {
     notify(error.message);
   }
@@ -384,8 +421,7 @@ function register() {
   for (const annotation of annotations) {
     if (!isColor(annotation.color)) continue;
     const range = ranges.get(annotation.id);
-    if (!range?.startContainer.isConnected || !range?.endContainer.isConnected)
-      continue;
+    if (!validRange(range, annotation.anchor.exact)) continue;
     const name = highlightName(annotation.color);
     if (!groups.has(name)) groups.set(name, []);
     groups.get(name).push(range);
@@ -436,7 +472,9 @@ function restore(root) {
   const candidates =
     root === document.body
       ? annotations.filter((a) => a.scope === "page")
-      : [...(byMessage.get(id) || [])];
+      : id
+        ? [...(byMessage.get(id) || [])]
+        : [];
   for (const a of candidates) {
     if (a.recovery) continue;
     if (a.scope === "page" && root !== document.body) continue;
@@ -447,6 +485,17 @@ function restore(root) {
       root.contains(ranges.get(a.id).startContainer)
     )
       ranges.delete(a.id);
+  }
+}
+function restoreAnonymous() {
+  const rows = (byMessage.get(null) || []).filter(
+    (a) => a.scope === "message" && !a.recovery,
+  );
+  if (!rows.length) return;
+  const matches = resolveAnonymous(adapter.roots(), rows);
+  for (const row of rows) {
+    if (matches.has(row.id)) ranges.set(row.id, matches.get(row.id));
+    else ranges.delete(row.id);
   }
 }
 async function reload() {
@@ -476,6 +525,7 @@ async function reload() {
   }
   for (const root of new Set([document.body, ...adapter.roots()]))
     restore(root);
+  restoreAnonymous();
   register();
 }
 const dirty = new Set();
@@ -494,19 +544,22 @@ const observer = new MutationObserver((records) => {
       }
   }
   if (!dirty.size) return;
-  clearTimeout(timer);
+  // A running stream must not postpone restoration indefinitely.
+  for (const root of dirty) if (!root.isConnected) dirty.delete(root);
+  if (timer) return;
   timer = setTimeout(() => {
+    timer = null;
     if (adapter.identity() !== conversation) {
       dirty.clear();
       void reload();
       return;
     }
-    for (const [id, range] of ranges)
-      if (!range.startContainer.isConnected || !range.endContainer.isConnected)
-        ranges.delete(id);
+    for (const a of annotations)
+      if (!validRange(ranges.get(a.id), a.anchor.exact)) ranges.delete(a.id);
     for (const root of dirty) if (root.isConnected) restore(root);
     // Page-scoped selections can span several provider messages.
     if (annotations.some((a) => a.scope === "page")) restore(document.body);
+    restoreAnonymous();
     dirty.clear();
     register();
   }, 150);

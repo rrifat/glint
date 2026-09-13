@@ -81,6 +81,50 @@ export function resolveAnchor(root, anchor) {
   const match = locate(index.text, anchor);
   return rangeFromMatch(root, index, match);
 }
+// Without message identity, offsets cannot distinguish different messages.
+// Require the saved context and a unique occurrence across every candidate.
+export function resolveAnonymous(roots, annotations) {
+  const matches = new Map();
+  const ambiguous = new Set();
+  for (const root of roots) {
+    const index = textIndex(root);
+    for (const annotation of annotations) {
+      const { exact, prefix, suffix } = annotation.anchor;
+      if (!exact || ambiguous.has(annotation.id)) continue;
+      for (
+        let start = index.text.indexOf(exact);
+        start !== -1;
+        start = index.text.indexOf(exact, start + 1)
+      ) {
+        const end = start + exact.length;
+        if (
+          index.text.slice(Math.max(0, start - prefix.length), start) !==
+            prefix ||
+          index.text.slice(end, end + suffix.length) !== suffix
+        )
+          continue;
+        const range = rangeFromMatch(root, index, { start, end });
+        const previous = matches.get(annotation.id);
+        // Nested adapter roots can expose the same physical occurrence twice.
+        if (
+          previous &&
+          previous.startContainer === range.startContainer &&
+          previous.startOffset === range.startOffset &&
+          previous.endContainer === range.endContainer &&
+          previous.endOffset === range.endOffset
+        )
+          continue;
+        if (previous) {
+          matches.delete(annotation.id);
+          ambiguous.add(annotation.id);
+          break;
+        }
+        matches.set(annotation.id, range);
+      }
+    }
+  }
+  return matches;
+}
 export function rangeFromMatch(root, index, match) {
   if (!match) return null;
   const first = index.nodes.find((e) => e.start + e.node.length > match.start);
